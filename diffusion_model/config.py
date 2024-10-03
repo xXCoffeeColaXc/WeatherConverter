@@ -5,6 +5,7 @@ METADATA_DIR = "./data/metadata"
 
 
 class Config(object):
+
     def __init__(self, config) -> None:
         # Model configuration.
         self.c_in = config.c_in
@@ -31,7 +32,8 @@ class Config(object):
         self.num_workers = config.num_workers
         self.mode = config.mode
         self.wandb = config.wandb
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device(
+            'cuda' if torch.cuda.is_available() else 'cpu')
 
         # Directories.
         self.image_dir = config.image_dir
@@ -45,4 +47,3 @@ class Config(object):
         self.sample_step = config.sample_step
         self.validation_step = config.validation_step
         self.model_save_step = config.model_save_step
-
