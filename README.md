@@ -1,5 +1,5 @@
 # Diffusion based Image Translation with Semantic mask Guidance
-
+asd
 ## Project Description
 This project focuses on Denoising Diffusion Probabilistic Models (DDPMs) to generate urban scene images in different weather conditions, such as rainy, foggy, night from ideal sunny-day images. For semantic consistency we inject semantic mask as gradient guidance to achive this consistency between the input and target image.
 
