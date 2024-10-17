@@ -5,6 +5,7 @@
 /checkpoints
 /wandb
 /lightning_logs
-/__pycache__
+**/__pycache__
 *.pth
 /venv
+seg_model/weights/*.pth*
