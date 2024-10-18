@@ -191,7 +191,11 @@ def train_loop(
             print(f"[Val] Overall Acc at Epoch [{epoch}/{epochs}] - Score: {val_score['Overall Acc']:.4f}")
             print(f"[Val] Mean IoU at Epoch [{epoch}/{epochs}] - Score: {val_score['Mean IoU']:.4f}")
             print_class_iou(epoch, epochs, val_score)
-            wandb.log({"val_mean_iou": val_score['Mean IoU'], "val_overall_acc": val_score['Overall Acc']})
+            wandb.log(
+                {
+                    "val_mean_iou": val_score['Mean IoU'], "val_overall_acc": val_score['Overall Acc'], "epoch": epoch
+                }
+            )
 
             # Save the best model
             if val_score['Mean IoU'] > best_score:
