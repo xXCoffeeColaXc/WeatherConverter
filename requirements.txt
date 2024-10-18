@@ -5,3 +5,8 @@ torch==2.3.0
 torchmetrics==1.4.0.post0
 torchvision==0.18.0
 tqdm==4.65.2
+scikit-learn==1.5.2
+visdom==0.2.4
+pydantic==2.9.2
+PyYAML==6.0.2
+wandb==0.18.5

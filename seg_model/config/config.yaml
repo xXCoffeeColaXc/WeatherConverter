@@ -1,0 +1,74 @@
+training:
+  device: 'auto'
+  random_seed: 42
+  epochs: 5
+  batch_size: 2 # has to be >1
+  num_workers: 1
+  log_interval: 10 # iters
+  save_interval: 5 # epochs
+  resume_training: False
+  resume_checkpoint: ''
+  loss_function:
+    type: 'CrossEntropyLoss'
+    params:
+      ignore_index: 255
+      reduction: 'mean'
+    # type: 'FocalLoss'
+    # params:
+    #   ignore_index: 255
+    #   size_average: True
+  scheduler:
+    type: 'PolyLR'
+    params:
+      power: 0.9
+    # type: 'StepLR'
+    # params:
+    #   step_size: 10
+    #   gamma: 0.1
+
+data:
+  root_dir: 'data'
+  labels: 'data/gt'
+  images: 'data/rgb_anon'
+  train_split: 'train'
+  val_split: 'val'
+  weather: ['fog']
+  transform:
+    target_resolution: [24,24] # [768, 768]
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+    horizontal_flip: 0.5
+    jitter:
+      brightness: 0.4
+      contrast: 0.2
+      saturation: 0.2
+    random_noise:
+      mean: 0.25
+      std_range: [0.0, 0.1]
+    class_wise_masking:
+      p: 0.1
+      num_classes_to_keep: 1
+
+optimizer:
+  type: 'SGD' 
+  params:
+    lr: 0.0001
+    momentum: 0.9
+    weight_decay: 1e-4
+  layerwise_lr:
+    backbone: 0.00001
+    classifier: 0.0001
+
+model:
+  path: 'seg_model/weights/best_deeplabv3plus_resnet101_cityscapes_os16.pth.tar'
+  name: 'deeplabv3plus_resnet101'
+  num_classes: 19
+  output_stride: 16
+  bn_momentum: 0.01
+
+folders:
+  output: 'seg_model/outputs'
+  weights: 'seg_model/weights'
+  logs: 'seg_model/logs'
+  checkpoints: 'seg_model/outputs/checkpoints'
+  samples: 'seg_model/outputs/samples'
