@@ -2,7 +2,7 @@ from torchvision.transforms.functional import normalize
 import torch.nn as nn
 import numpy as np
 import os
-
+from datasets.acdc import ACDCDataset
 
 def denormalize(tensor, mean, std):
     mean = np.array(mean)
@@ -79,7 +79,6 @@ def _find_max_run_id(checkpoint_path):
 
 def print_class_iou(epoch, epochs, val_score):
     print(f"[Val] Class IoU at Epoch [{epoch}/{epochs}] - Score:")
-
     # Loop through the dictionary and print each class with indentation
     for class_id, iou_value in val_score['Class IoU'].items():
-        print(f"    Class {class_id}: {iou_value}")
+        print(f"    Class {ACDCDataset.class_id_to_name[class_id]}: {iou_value}")

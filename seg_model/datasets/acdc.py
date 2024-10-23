@@ -51,6 +51,8 @@ class ACDCDataset(Dataset):
         CityscapesClass('license plate', -1, 255, 'vehicle', 7, False, True, (0, 0, 142)),
     ]
 
+        # Create a dictionary mapping class IDs to class names
+    class_id_to_name = {c.train_id: c.name for c in classes}
     train_id_to_color = [c.color for c in classes if (c.train_id != -1 and c.train_id != 255)]
     train_id_to_color.append([0, 0, 0])
     train_id_to_color = np.array(train_id_to_color)
