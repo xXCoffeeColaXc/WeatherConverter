@@ -68,7 +68,7 @@ class ClassWiseMasking(object):
             # Get unique classes present in the label
             classes_present = np.unique(lbl_np)
             # Filter classes_present to keep only the allowed classes
-            allowed_classes = {7, 8, 9, 11, 12, 19, 20, 21, 22, 23, 24, 26, 27, 28, 32, 33}  # it has to be the train id
+            allowed_classes = {7, 11, 19, 20, 21, 22, 23, 24, 26, 27, 28, 32, 33}  # it has to be the train id
             allowed_classes_present = [cls for cls in classes_present if cls in allowed_classes]
             # Check if there are enough classes to keep
             if len(allowed_classes_present) < self.num_classes_to_keep:
@@ -504,7 +504,7 @@ class ExtResize(object):
     """
 
     def __init__(self, size, interpolation=Image.BILINEAR):
-        assert isinstance(size, int) or (isinstance(size, collections.Iterable) and len(size) == 2)
+        #assert isinstance(size, int) or (isinstance(size, collections.Iterable) and len(size) == 2)
         self.size = size
         self.interpolation = interpolation
 

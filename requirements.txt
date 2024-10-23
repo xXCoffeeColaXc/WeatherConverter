@@ -10,3 +10,4 @@ visdom==0.2.4
 pydantic==2.9.2
 PyYAML==6.0.2
 wandb==0.18.5
+opencv-python==4.10.0.84

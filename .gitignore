@@ -9,3 +9,4 @@
 *.pth
 /venv
 seg_model/weights/*.pth*
+*.pem
