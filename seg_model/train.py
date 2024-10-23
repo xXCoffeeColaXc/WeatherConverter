@@ -232,6 +232,7 @@ if __name__ == '__main__':
     transform = ExtCompose(
         [
             ExtRandomHorizontalFlip(p=transform_config.horizontal_flip),
+            ExtResize(size=transform_config.resize_resolution),
             ExtRandomCrop(size=transform_config.target_resolution),
             ExtColorJitter(**transform_config.jitter),
             AddGaussianNoise(**transform_config.random_noise),
@@ -241,10 +242,14 @@ if __name__ == '__main__':
         ]
     )
 
-    val_transform = ExtCompose([
-        ExtToTensor(),
-        ExtNormalize(mean=transform_config.mean, std=transform_config.std),
-    ])
+    val_transform = ExtCompose(
+        [
+            ExtResize(size=transform_config.resize_resolution),
+            ExtCenterCrop(size=transform_config.target_resolution),
+            ExtToTensor(),
+            ExtNormalize(mean=transform_config.mean, std=transform_config.std),
+        ]
+    )
 
     train_loader = get_dataloader(
         root_dir=config.data.root_dir,

@@ -34,7 +34,8 @@ data:
   val_split: 'val'
   weather: ['fog']
   transform:
-    target_resolution: [24,24] # [768, 768]
+    resize_resolution: [270,480] # [768, 768]
+    target_resolution: [256,256] # [768, 768]
     mean: [0.485, 0.456, 0.406]
     std: [0.229, 0.224, 0.225]
     horizontal_flip: 0.5

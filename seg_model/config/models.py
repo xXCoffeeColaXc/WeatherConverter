@@ -13,6 +13,7 @@ class LossFunctionConfig(BaseModel):
 
 
 class TransformConfig(BaseModel):
+    resize_resolution: List[int] = Field(..., min_items=2, max_items=2)
     target_resolution: List[int] = Field(..., min_items=2, max_items=2)
     mean: List[float] = Field(..., min_items=3, max_items=3)
     std: List[float] = Field(..., min_items=3, max_items=3)
