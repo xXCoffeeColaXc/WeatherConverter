@@ -13,6 +13,31 @@ class ACDCDataset(Dataset):
         'CityscapesClass',
         ['name', 'id', 'train_id', 'category', 'category_id', 'has_instances', 'ignore_in_eval', 'color']
     )
+
+    # TODO: add weights to the class
+    #     # Define the class weights (example values, can be adjusted)
+    # weights = {
+    #     0: 1.0,    # road
+    #     1: 1.0,    # sidewalk
+    #     2: 2.0,    # building
+    #     3: 2.5,    # wall
+    #     4: 2.0,    # fence
+    #     5: 1.5,    # pole
+    #     6: 3.0,    # traffic light
+    #     7: 2.5,    # traffic sign
+    #     8: 1.0,    # vegetation
+    #     9: 1.2,    # terrain
+    #     10: 1.0,   # sky
+    #     11: 3.0,   # person
+    #     12: 2.5,   # rider
+    #     13: 1.0,   # car
+    #     14: 1.5,   # truck
+    #     15: 1.5,   # bus
+    #     16: 3.0,   # train
+    #     17: 2.5,   # motorcycle
+    #     18: 2.0,   # bicycle
+    # }
+
     classes = [
         CityscapesClass('unlabeled', 0, 255, 'void', 0, False, True, (0, 0, 0)),
         CityscapesClass('ego vehicle', 1, 255, 'void', 0, False, True, (0, 0, 0)),
