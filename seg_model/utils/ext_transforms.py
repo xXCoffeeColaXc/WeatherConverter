@@ -158,11 +158,12 @@ class ExtCenterCrop(object):
             made.
     """
 
-    def __init__(self, size):
+    def __init__(self, size, just_label=False):
         if isinstance(size, numbers.Number):
             self.size = (int(size), int(size))
         else:
             self.size = size
+        self.just_label = just_label
 
     def __call__(self, img, lbl):
         """
@@ -171,7 +172,10 @@ class ExtCenterCrop(object):
         Returns:
             PIL Image: Cropped image.
         """
-        return F.center_crop(img, self.size), F.center_crop(lbl, self.size)
+        if self.just_label:
+            return img, F.center_crop(lbl, self.size)
+        else:
+            return F.center_crop(img, self.size), F.center_crop(lbl, self.size)
 
     def __repr__(self):
         return self.__class__.__name__ + '(size={0})'.format(self.size)
@@ -503,10 +507,11 @@ class ExtResize(object):
             ``PIL.Image.BILINEAR``
     """
 
-    def __init__(self, size, interpolation=Image.BILINEAR):
+    def __init__(self, size, interpolation=Image.BILINEAR, just_label=False):
         #assert isinstance(size, int) or (isinstance(size, collections.Iterable) and len(size) == 2)
         self.size = size
         self.interpolation = interpolation
+        self.just_label = just_label
 
     def __call__(self, img, lbl):
         """
@@ -515,7 +520,10 @@ class ExtResize(object):
         Returns:
             PIL Image: Rescaled image.
         """
-        return F.resize(img, self.size, self.interpolation), F.resize(lbl, self.size, Image.NEAREST)
+        if self.just_label:
+            return img, F.resize(lbl, self.size, Image.NEAREST)
+        else:
+            return F.resize(img, self.size, self.interpolation), F.resize(lbl, self.size, Image.NEAREST)
 
     def __repr__(self):
         interpolate_str = _pil_interpolation_to_str[self.interpolation]

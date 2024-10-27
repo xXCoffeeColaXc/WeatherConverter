@@ -1,26 +1,19 @@
 import torch
 import torch.nn as nn
-from diffusion_model.config.models import ModelConfig
 
 
 def get_time_embedding(time_steps, temb_dim):
-    """
+    r"""
     Convert time steps tensor into an embedding using the
     sinusoidal time embedding formula
-
-    Args:
-        time_steps (torch.Tensor): 1D tensor of length batch size
-        temb_dim (int): Dimension of the embedding
-
-    Returns:
-        torch.Tensor: BxD embedding representation of B time steps
+    :param time_steps: 1D tensor of length batch size
+    :param temb_dim: Dimension of the embedding
+    :return: BxD embedding representation of B time steps
     """
     assert temb_dim % 2 == 0, "time embedding dimension must be divisible by 2"
 
     # factor = 10000^(2i/d_model)
-    factor = 10000**(
-        (torch.arange(start=0, end=temb_dim // 2, dtype=torch.float32, device=time_steps.device) / (temb_dim // 2))
-    )
+    factor = 10000**(torch.arange(0, temb_dim // 2, dtype=torch.float32, device=time_steps.device) / (temb_dim // 2))
 
     # pos / factor
     # timesteps B -> B, 1 -> B, temb_dim
@@ -30,22 +23,15 @@ def get_time_embedding(time_steps, temb_dim):
 
 
 class DownBlock(nn.Module):
+    r"""
+    Down conv block with attention.
+    Sequence of following block
+    1. Resnet block with time embedding
+    2. Attention block
+    3. Downsample using 2x2 average pooling
+    """
 
     def __init__(self, in_channels, out_channels, t_emb_dim, down_sample=True, num_heads=4, num_layers=1):
-        """
-        Down conv block with attention.
-            1. Resnet block with time embedding
-            2. Attention block
-            3. Downsample using 2x2 average pooling
-
-        Args:
-            in_channels (int): Number of input channels.
-            out_channels (int): Number of output channels.
-            t_emb_dim (int): Dimension of the time embedding.
-            down_sample (bool, optional): Whether to perform downsampling using 2x2 average pooling. Defaults to True.
-            num_heads (int, optional): Number of attention heads. Defaults to 4.
-            num_layers (int, optional): Number of layers in the block. Defaults to 1.
-        """
         super().__init__()
         self.num_layers = num_layers
         self.down_sample = down_sample
@@ -86,16 +72,6 @@ class DownBlock(nn.Module):
         self.down_sample_conv = nn.Conv2d(out_channels, out_channels, 4, 2, 1) if self.down_sample else nn.Identity()
 
     def forward(self, x, t_emb):
-        """
-        Forward pass of the DownBlock module.
-
-        Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, in_channels, height, width).
-            t_emb (torch.Tensor): Time embedding tensor of shape (batch_size, t_emb_dim).
-
-        Returns:
-            torch.Tensor: Output tensor of shape (batch_size, out_channels, height', width').
-        """
         out = x
         for i in range(self.num_layers):
 
@@ -120,22 +96,15 @@ class DownBlock(nn.Module):
 
 
 class MidBlock(nn.Module):
+    r"""
+    Mid conv block with attention.
+    Sequence of following blocks
+    1. Resnet block with time embedding
+    2. Attention block
+    3. Resnet block with time embedding
+    """
 
     def __init__(self, in_channels, out_channels, t_emb_dim, num_heads=4, num_layers=1):
-        """
-        Mid conv block with attention.
-            Sequence of following blocks
-            1. Resnet block with time embedding
-            2. Attention block
-            3. Resnet block with time embedding
-
-        Args:
-            in_channels (int): Number of input channels.
-            out_channels (int): Number of output channels.
-            t_emb_dim (int): Dimension of the time embedding.
-            num_heads (int, optional): Number of attention heads. Defaults to 4.
-            num_layers (int, optional): Number of layers. Defaults to 1.
-        """
         super().__init__()
         self.num_layers = num_layers
         self.resnet_conv_first = nn.ModuleList(
@@ -175,16 +144,6 @@ class MidBlock(nn.Module):
         )
 
     def forward(self, x, t_emb):
-        """
-        Forward pass of the MidBlock module.
-
-        Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, in_channels, height, width).
-            t_emb (torch.Tensor): Time embedding tensor of shape (batch_size, t_emb_dim).
-
-        Returns:
-            torch.Tensor: Output tensor of shape (batch_size, out_channels, height, width).
-        """
         out = x
 
         # First resnet block
@@ -216,23 +175,16 @@ class MidBlock(nn.Module):
 
 
 class UpBlock(nn.Module):
+    r"""
+    Up conv block with attention.
+    Sequence of following blocks
+    1. Upsample
+    1. Concatenate Down block output
+    2. Resnet block with time embedding
+    3. Attention Block
+    """
 
     def __init__(self, in_channels, out_channels, t_emb_dim, up_sample=True, num_heads=4, num_layers=1):
-        """
-        Up conv block with attention.
-            1. Upsample
-            2. Concatenate Down block output
-            3. Resnet block with time embedding
-            4. Attention Block
-
-        Args:
-            in_channels (int): Number of input channels.
-            out_channels (int): Number of output channels.
-            t_emb_dim (int): Dimension of the time embedding.
-            up_sample (bool, optional): Whether to perform upsampling. Defaults to True.
-            num_heads (int, optional): Number of attention heads. Defaults to 4.
-            num_layers (int, optional): Number of layers in the block. Defaults to 1.
-        """
         super().__init__()
         self.num_layers = num_layers
         self.up_sample = up_sample
@@ -271,21 +223,11 @@ class UpBlock(nn.Module):
                 for i in range(num_layers)
             ]
         )
-        self.up_sample_conv = nn.ConvTranspose2d(in_channels // 2, in_channels //
-                                                 2, 4, 2, 1) if self.up_sample else nn.Identity()
+        self.up_sample_conv = nn.ConvTranspose2d(in_channels // 2, in_channels // 2,
+                                                 4, 2, 1) \
+            if self.up_sample else nn.Identity()
 
     def forward(self, x, out_down, t_emb):
-        """
-        Forward pass of the UpBlock module.
-
-        Args:
-            x (torch.Tensor): Input tensor.
-            out_down (torch.Tensor): Output tensor from the down block.
-            t_emb (torch.Tensor): Time embedding tensor.
-
-        Returns:
-            torch.Tensor: Output tensor.
-        """
         x = self.up_sample_conv(x)
         x = torch.cat([x, out_down], dim=1)
 
@@ -314,29 +256,33 @@ class Unet(nn.Module):
     Down blocks, Midblocks and Uplocks
     """
 
-    def __init__(self, model_config: ModelConfig):
+    def __init__(self, model_config):
         super().__init__()
-        im_channels = model_config.im_channels
-        self.down_channels = model_config.down_channels
-        self.mid_channels = model_config.mid_channels
-        self.t_emb_dim = model_config.time_emb_dim
-        self.down_sample = model_config.down_sample
-        self.num_down_layers = model_config.num_down_layers
-        self.num_mid_layers = model_config.num_mid_layers
-        self.num_up_layers = model_config.num_up_layers
+        im_channels = model_config['im_channels']
+        self.down_channels = model_config['down_channels']
+        self.mid_channels = model_config['mid_channels']
+        self.t_emb_dim = model_config['time_emb_dim']
+        self.down_sample = model_config['down_sample']
+        self.num_down_layers = model_config['num_down_layers']
+        self.num_mid_layers = model_config['num_mid_layers']
+        self.num_up_layers = model_config['num_up_layers']
+        self.num_heads = model_config.get('num_heads', 4)
+        self.final_channels = model_config.get('final_channels', 16)  # Parameterized
 
-        assert self.mid_channels[0] == self.down_channels[-1]
-        assert self.mid_channels[-1] == self.down_channels[-2]
-        assert len(self.down_sample) == len(self.down_channels) - 1
+        # Validations
+        assert self.mid_channels[0] == self.down_channels[-1], "First mid_channels must match last down_channels"
+        assert self.mid_channels[-1] == self.down_channels[-2], "Last mid_channels must match second last down_channels"
+        assert len(self.down_sample) == len(self.down_channels) - 1, "down_sample length must be len(down_channels)-1"
 
         # Initial projection from sinusoidal time embedding
         self.t_proj = nn.Sequential(
             nn.Linear(self.t_emb_dim, self.t_emb_dim), nn.SiLU(), nn.Linear(self.t_emb_dim, self.t_emb_dim)
         )
 
-        self.up_sample = list(reversed(self.down_sample))
-        self.conv_in = nn.Conv2d(im_channels, self.down_channels[0], kernel_size=3, padding=(1, 1))
+        # Input convolution
+        self.conv_in = nn.Conv2d(im_channels, self.down_channels[0], kernel_size=3, padding=1)
 
+        # Downsampling blocks
         self.downs = nn.ModuleList([])
         for i in range(len(self.down_channels) - 1):
             self.downs.append(
@@ -345,90 +291,109 @@ class Unet(nn.Module):
                     self.down_channels[i + 1],
                     self.t_emb_dim,
                     down_sample=self.down_sample[i],
+                    num_heads=model_config.get('num_heads', 4),
                     num_layers=self.num_down_layers
                 )
             )
 
+        # Mid blocks
         self.mids = nn.ModuleList([])
         for i in range(len(self.mid_channels) - 1):
             self.mids.append(
                 MidBlock(
-                    self.mid_channels[i], self.mid_channels[i + 1], self.t_emb_dim, num_layers=self.num_mid_layers
+                    self.mid_channels[i],
+                    self.mid_channels[i + 1],
+                    self.t_emb_dim,
+                    num_heads=model_config.get('num_heads', 4),
+                    num_layers=self.num_mid_layers
                 )
             )
 
+        # Upsampling blocks
         self.ups = nn.ModuleList([])
         for i in reversed(range(len(self.down_channels) - 1)):
+            in_ch = self.down_channels[i] * 2
+            out_ch = self.down_channels[i - 1] if i != 0 else self.final_channels
             self.ups.append(
                 UpBlock(
-                    self.down_channels[i] * 2,
-                    self.down_channels[i - 1] if i != 0 else 32,
-                    self.t_emb_dim,
+                    in_channels=in_ch,
+                    out_channels=out_ch,
+                    t_emb_dim=self.t_emb_dim,
                     up_sample=self.down_sample[i],
+                    num_heads=model_config.get('num_heads', 4),
                     num_layers=self.num_up_layers
                 )
             )
 
-        self.norm_out = nn.GroupNorm(8, 32)
-        self.conv_out = nn.Conv2d(32, im_channels, kernel_size=3, padding=1)
+        # Final normalization and convolution
+        self.norm_out = nn.GroupNorm(8, self.final_channels)
+        self.conv_out = nn.Conv2d(self.final_channels, im_channels, kernel_size=3, padding=1)
 
     def forward(self, x, t):
-        # Shapes assuming downblocks are [C1, C2, C3, C4]
-        # Shapes assuming midblocks are [C4, C4, C3]
-        # Shapes assuming downsamples are [True, True, False]
-        # B x C x H x W
-        out = self.conv_in(x)
-        print("Shape after conv_in:", out.shape)
-        # B x C1 x H x W
+        # Input projection
+        out = self.conv_in(x)  # B x C1 x H x W
 
-        # t_emb -> B x t_emb_dim
+        # Time embedding
         t_emb = get_time_embedding(torch.as_tensor(t).long(), self.t_emb_dim)
-        t_emb = self.t_proj(t_emb)
+        t_emb = self.t_proj(t_emb)  # B x t_emb_dim
 
         down_outs = []
 
-        for idx, down in enumerate(self.downs):
+        # Downsampling path
+        for down in self.downs:
             down_outs.append(out)
             out = down(out, t_emb)
-            print(f"Shape after downblock {idx+1}:", out.shape)
-        # down_outs  [B x C1 x H x W, B x C2 x H/2 x W/2, B x C3 x H/4 x W/4]
-        # out B x C4 x H/4 x W/4
+        # down_outs contains outputs before each downsampling
 
+        # Mid blocks
         for mid in self.mids:
             out = mid(out, t_emb)
-            print("Shape after midblock:", out.shape)
-        # out B x C3 x H/4 x W/4
 
+        # Upsampling path
         for up in self.ups:
             down_out = down_outs.pop()
             out = up(out, down_out, t_emb)
-            print("Shape after upblock:", out.shape)
-            # out [B x C2 x H/4 x W/4, B x C1 x H/2 x W/2, B x 16 x H x W]
+
+        # Final layers
         out = self.norm_out(out)
         out = nn.SiLU()(out)
         out = self.conv_out(out)
-        # out B x C x H x W
-        print("Final output shape:", out.shape)
+
         return out
 
 
 if __name__ == '__main__':
-    from diffusion_model.config.models import Config
-    import yaml
+    # from diffusion_model.config.models import Config
+    # import yaml
 
-    def load_config(config_path: str) -> Config:
-        with open(config_path, 'r') as file:
-            config_data = yaml.safe_load(file)
-        return Config(**config_data)
+    # def load_config(config_path: str) -> Config:
+    #     with open(config_path, 'r') as file:
+    #         config_data = yaml.safe_load(file)
+    #     return Config(**config_data)
 
-    config = load_config('diffusion_model/config/config.yaml')
+    # config = load_config('diffusion_model/config/config.yaml')
 
-    model = Unet(config.model)
+    model_config = {
+        "im_channels": 3,  # Number of input image channels (e.g., 3 for RGB)
+        "im_size": 256,  # Updated image size
+        "down_channels": [64, 128, 256, 512],  # Increased channels for deeper architecture
+        "mid_channels": [512, 512, 256],  # Updated mid-section channels
+        "down_sample": [True, True, False],  # 4 DownBlocks with downsampling
+        "time_emb_dim": 128,  # Increased time embedding dimension for larger model
+        "num_down_layers": 1,  # Number of ResNet layers per DownBlock
+        "num_mid_layers": 1,  # Number of ResNet layers per MidBlock
+        "num_up_layers": 1,  # Number of ResNet layers per UpBlock
+        "num_heads": 4,  # Increased attention heads for larger feature maps
+        "final_channels": 64
+    }
 
-    input_tensor = torch.randn(1, config.model.im_channels, config.model.im_size, config.model.im_size)
+    model = Unet(model_config)
+    model.to('cuda')
+    x = torch.randn(1, 3, 256, 256).to('cuda')
+    t = torch.randint(0, 1000, (1,)).to('cuda')
 
-    t = (10,)
-
-    output = model(input_tensor, t)
-
-    print(output.shape)
+    try:
+        output = model(x, t)
+        print(output.shape)  # Expected: torch.Size([1, 3, 256, 256])
+    except Exception as e:
+        print(e)

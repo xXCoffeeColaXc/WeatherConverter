@@ -32,6 +32,7 @@ class ModelConfig(BaseModel):
     num_mid_layers: int
     num_up_layers: int
     num_heads: int
+    final_channels: int
 
 
 class FolderConfig(BaseModel):
