@@ -16,6 +16,8 @@ from tqdm import tqdm
 from metrics.stream_metrics import StreamSegMetrics
 from config.models import Config
 import wandb
+import os
+import matplotlib.pyplot as plt
 
 
 def load_config(config_path: str) -> Config:
@@ -58,8 +60,7 @@ def setup_logger():
 
 
 def load_model(weight_path: str) -> torch.nn.Module:
-    model = network.modeling.__dict__[config.model.name
-                                     ](num_classes=config.model.num_classes, output_stride=config.model.output_stride)
+
     model.load_state_dict(torch.load(weight_path)['model_state'])
     model.to(device)
 
@@ -69,8 +70,6 @@ def load_model(weight_path: str) -> torch.nn.Module:
 
 
 def reload_modules(weight_path: str, optimizer: torch.optim.Optimizer, scheduler: utils.PolyLR) -> torch.nn.Module:
-    model = network.modeling.__dict__[config.model.name
-                                     ](num_classes=config.model.num_classes, output_stride=config.model.output_stride)
     checkpoint = torch.load(weight_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.to(device)
@@ -126,23 +125,69 @@ def get_dataloader(
     return loader
 
 
+def save_gradients(gradient_magnitude: np.ndarray, epoch: int, batch_idx: int, images, outputs) -> None:
+    # Save input and gradient images for visualization at specified intervals
+
+    for i in range(min(len(images), 3)):  # Save a few samples from each batch
+        # Save normalized input image (converted to numpy format)
+        input_image_np = images[i].detach().cpu().numpy()
+        input_image_np = np.transpose(input_image_np, (1, 2, 0))  # Shape: [height, width, channels]
+
+        # Optionally, denormalize if you want to visualize in original colors
+        mean = np.array([0.485, 0.456, 0.406])
+        std = np.array([0.229, 0.224, 0.225])
+        input_image_np = std * input_image_np + mean  # Denormalize
+        input_image_np = np.clip(input_image_np, 0, 1)  # Clip to [0, 1]
+
+        # save preds
+        pred = outputs.argmax(dim=1).cpu().numpy()  # Shape: [512, 512]
+        colorized_preds = ACDCDataset.decode_target(pred[i]).astype('uint8')
+        colorized_preds = Image.fromarray(colorized_preds)
+
+        # Save gradient magnitude
+        grad_magnitude_np = gradient_magnitude[i]
+
+        # Plot and save pairplot
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(10, 5))
+
+        # Input image
+        ax1.imshow(input_image_np)
+        ax1.set_title('Input Image')
+        ax1.axis('off')
+
+        # Gradient magnitude
+        ax2.imshow(grad_magnitude_np, cmap='viridis')
+        ax2.set_title('Gradient Magnitude')
+        ax2.axis('off')
+
+        # Predictions
+        ax3.imshow(colorized_preds)
+        ax3.set_title('Predictions')
+        ax3.axis('off')
+
+        plt.tight_layout()
+        plt.savefig(f"seg_model/outputs/gradients/epoch_{epoch}_batch_{batch_idx}_sample_{i}.png")
+        plt.close(fig)
+
+
 def train_loop(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     criterion: torch.nn.Module,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
     train_loader: DataLoader,
-    val_loader: Optional[DataLoader] = None
+    val_loader: Optional[DataLoader] = None,
+    start_epoch: int = 1
 ) -> None:
 
     best_score = 0.0
-    start_epoch = 1
-    epochs = config.training.epochs
+    start_epoch = start_epoch
+    epochs = start_epoch + config.training.epochs
 
-    if config.training.resume_training and config.training.resume_checkpoint is not None:
-        model, optimizer, scheduler, start_epoch = reload_modules(config.training.resume_checkpoint, optimizer, scheduler)
+    # Ensure a directory to save gradient images
+    os.makedirs("seg_model/outputs/gradients", exist_ok=True)
 
-    for epoch in range(start_epoch, epochs + 1):
+    for epoch in range(start_epoch, epochs):
         model.train()
         interval_loss = 0.0
         total_loss = 0.0
@@ -154,10 +199,20 @@ def train_loop(
             images = images.to(device, dtype=torch.float32)
             labels = labels.to(device, dtype=torch.long)
 
+            images.requires_grad = True  # Enable gradient tracking for images
+
             optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss.backward()
+
+            # Calculate gradients and gradient magnitude
+            input_gradients = images.grad.detach().cpu().numpy()  # Shape: [batch, channels, height, width]
+            gradient_magnitude = np.sqrt(np.sum(input_gradients**2, axis=1))  # Shape: [batch, height, width]
+
+            # if cur_itrs % config.training.log_interval == 0:
+            #     save_gradients(gradient_magnitude, epoch, batch_idx, images, outputs)
+
             optimizer.step()
 
             np_loss = loss.detach().cpu().numpy()
@@ -225,7 +280,8 @@ def validate(model: torch.nn.Module, dataloader: DataLoader) -> dict:
 
 if __name__ == '__main__':
     transform_config = config.data.transform
-    model = load_model(config.model.path)
+    model = network.modeling.__dict__[config.model.name
+                                     ](num_classes=config.model.num_classes, output_stride=config.model.output_stride)
     setup_logger()
 
     # Define image transforms
@@ -301,13 +357,20 @@ if __name__ == '__main__':
     elif config.training.loss_function.type == 'FocalLoss':
         criterion = utils.FocalLoss(**config.training.loss_function.params)
 
+    if config.training.resume_training and config.training.resume_checkpoint is not None:
+        model, optimizer, scheduler, start_epoch = reload_modules(config.training.resume_checkpoint, optimizer, scheduler)
+    else:
+        model = load_model(config.model.path)
+        start_epoch = 1
+
     train_loop(
         model=model,
         optimizer=optimizer,
         criterion=criterion,
         scheduler=scheduler,
         train_loader=train_loader,
-        val_loader=val_loader
+        val_loader=val_loader,
+        start_epoch=start_epoch
     )
 
     wandb.finish()

@@ -3,11 +3,11 @@ training:
   random_seed: 42
   epochs: 5
   batch_size: 2 # has to be >1
-  num_workers: 1
-  log_interval: 10 # iters
+  num_workers: 0
+  log_interval: 5 # iters
   save_interval: 5 # epochs
-  resume_training: False
-  resume_checkpoint: ''
+  resume_training: True
+  resume_checkpoint: 'seg_model/outputs/checkpoints/deeplabv3plus_resnet101_epoch_28.pth'
   loss_function:
     type: 'CrossEntropyLoss'
     params:
@@ -27,12 +27,12 @@ training:
     #   gamma: 0.1
 
 data:
-  root_dir: 'data'
+  root_dir: '/media/talmacsi/48a93eb4-f27d-48ec-9f74-64e475c3b6ff/Downloads/data'
   labels: 'data/gt'
   images: 'data/rgb_anon'
   train_split: 'train'
   val_split: 'val'
-  weather: ['fog']
+  weather: ['fog', 'rain']
   transform:
     resize_resolution: [270,480] # [768, 768]
     target_resolution: [256,256] # [768, 768]
@@ -40,12 +40,12 @@ data:
     std: [0.229, 0.224, 0.225]
     horizontal_flip: 0.5
     jitter:
-      brightness: 0.4
+      brightness: 0.2
       contrast: 0.2
       saturation: 0.2
     random_noise:
-      mean: 0.25
-      std_range: [0.0, 0.1]
+      mean: 0.15
+      std_range: [0.0, 0.07]
     class_wise_masking:
       p: 0.1
       num_classes_to_keep: 1
@@ -61,7 +61,7 @@ optimizer:
     classifier: 0.0001
 
 model:
-  path: 'seg_model/weights/best_deeplabv3plus_resnet101_cityscapes_os16.pth.tar'
+  path: 'seg_model/outputs/checkpoints/deeplabv3plus_resnet101_epoch_28.pth' #'seg_model/weights/best_deeplabv3plus_resnet101_cityscapes_os16.pth.tar'
   name: 'deeplabv3plus_resnet101'
   num_classes: 19
   output_stride: 16
