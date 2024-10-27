@@ -2,25 +2,12 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
 
-class SchedulerConfig(BaseModel):
-    type: str
-    params: Dict[str, Any]
-
-
-class LossFunctionConfig(BaseModel):
-    type: str
-    params: Dict[str, Any]
-
-
 class TransformConfig(BaseModel):
     resize_resolution: List[int] = Field(..., min_items=2, max_items=2)
     target_resolution: List[int] = Field(..., min_items=2, max_items=2)
     mean: List[float] = Field(..., min_items=3, max_items=3)
     std: List[float] = Field(..., min_items=3, max_items=3)
     horizontal_flip: float = Field(..., ge=0.0, le=1.0)
-    jitter: Optional[Dict[str, float]]
-    random_noise: Optional[Dict[str, Any]] = Field(default=None)
-    class_wise_masking: Optional[Dict[str, Any]] = Field(default=None)
 
 
 class DataConfig(BaseModel):
@@ -33,18 +20,19 @@ class DataConfig(BaseModel):
     transform: TransformConfig
 
 
-class OptimizerConfig(BaseModel):
-    type: str
-    params: Dict[str, float]
-    layerwise_lr: Dict[str, float]
-
-
 class ModelConfig(BaseModel):
-    path: str
     name: str
-    num_classes: int
-    output_stride: int
-    bn_momentum: float
+    im_channels: int
+    im_size: int
+    down_channels: List[int]
+    mid_channels: List[int]
+    down_sample: List[bool]
+    time_emb_dim: int
+    num_down_layers: int
+    num_mid_layers: int
+    num_up_layers: int
+    num_heads: int
+    final_channels: int
 
 
 class FolderConfig(BaseModel):
@@ -61,18 +49,20 @@ class TrainingConfig(BaseModel):
     epochs: int
     batch_size: int  # Must be greater than 1
     num_workers: int
+    lr: float
     log_interval: int
     save_interval: int
     resume_training: bool
     resume_checkpoint: Optional[str] = None
-    loss_function: LossFunctionConfig
-    scheduler: SchedulerConfig
+    task_name: str
+    sample_size: int
+    num_grid_rows: int
+    ckpt_name: str
 
 
 class Config(BaseModel):
     training: TrainingConfig
     data: DataConfig
-    optimizer: OptimizerConfig
     model: ModelConfig
     folders: FolderConfig
 
@@ -90,9 +80,6 @@ if __name__ == '__main__':
         print(f"ignore_index: {ignore_index}")
         print(f"reduction: {reduction}")
 
-    config = load_config('seg_model/config/config.yaml')
+    config = load_config('diffusion_model/config/config.yaml')
     print(config.training.epochs)
     print(config.data.transform.target_resolution)
-
-    if config.training.loss_function.type == 'CrossEntropyLoss':
-        dummy_function(**config.training.loss_function.params)

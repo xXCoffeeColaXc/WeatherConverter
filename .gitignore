@@ -1,6 +1,6 @@
 /data
 /images
-/outputs
+**/outputs
 /models
 /checkpoints
 /wandb
