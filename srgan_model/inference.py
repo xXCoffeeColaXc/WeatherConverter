@@ -6,7 +6,6 @@ from models import Generator  # Ensure models.py is in the same directory
 # === Configuration ===
 model_path = '/media/talmacsi/48a93eb4-f27d-48ec-9f74-64e475c3b6ff/Downloads/swift_srgan_4x.pth.tar'  # Path to your pre-trained Generator model
 input_image_path = '/media/talmacsi/48a93eb4-f27d-48ec-9f74-64e475c3b6ff/Downloads/data/rgb_anon/fog/val/GOPR0476/GOPR0476_frame_000854_rgb_anon.png'  # Path to the input low-resolution image
-output_image_path = 'output.png'  # Path to save the super-resolved image
 upscale_factor = 4  # Upscale factor used during training (e.g., 4)
 crop_size = 128  # Size of the input image (128x128)
 
@@ -49,7 +48,7 @@ sr_image = transforms.ToPILImage()(sr_image)  # Convert Tensor to PIL Image
 print("Super Res image size:", sr_image.size)
 
 # === Save the Super-Resolved Image ===
-lr_image.save('image_original.png')
-sr_image.save('image_super_resolved.png')
+lr_image.save('srgan_model/image_original.png')
+sr_image.save('srgan_model/image_super_resolved.png')
 
 print(f"Super-resolved image saved.")
