@@ -218,25 +218,17 @@ class MidBlock(nn.Module):
 
 class UpBlock(nn.Module):
 
-    def __init__(self, in_channels, out_channels, t_emb_dim, up_sample=True, num_heads=4, num_layers=1):
-        """
-        Up conv block with attention.
-            1. Upsample
-            2. Concatenate Down block output
-            3. Resnet block with time embedding
-            4. Attention Block
-
-        Args:
-            in_channels (int): Number of input channels.
-            out_channels (int): Number of output channels.
-            t_emb_dim (int): Dimension of the time embedding.
-            up_sample (bool, optional): Whether to perform upsampling. Defaults to True.
-            num_heads (int, optional): Number of attention heads. Defaults to 4.
-            num_layers (int, optional): Number of layers in the block. Defaults to 1.
-        """
+    def __init__(
+        self, prev_channels, skip_channels, out_channels, t_emb_dim, up_sample=True, num_heads=4, num_layers=1
+    ):
         super().__init__()
         self.num_layers = num_layers
         self.up_sample = up_sample
+
+        self.up_sample_conv = nn.ConvTranspose2d(prev_channels, prev_channels, 4, 2,
+                                                 1) if self.up_sample else nn.Identity()
+        in_channels = prev_channels + skip_channels
+
         self.resnet_conv_first = nn.ModuleList(
             [
                 nn.Sequential(
@@ -248,9 +240,11 @@ class UpBlock(nn.Module):
                 ) for i in range(num_layers)
             ]
         )
+
         self.t_emb_layers = nn.ModuleList(
             [nn.Sequential(nn.SiLU(), nn.Linear(t_emb_dim, out_channels)) for _ in range(num_layers)]
         )
+
         self.resnet_conv_second = nn.ModuleList(
             [
                 nn.Sequential(
@@ -266,14 +260,13 @@ class UpBlock(nn.Module):
         self.attentions = nn.ModuleList(
             [nn.MultiheadAttention(out_channels, num_heads, batch_first=True) for _ in range(num_layers)]
         )
+
         self.residual_input_conv = nn.ModuleList(
             [
                 nn.Conv2d(in_channels if i == 0 else out_channels, out_channels, kernel_size=1)
                 for i in range(num_layers)
             ]
         )
-        self.up_sample_conv = nn.ConvTranspose2d(in_channels // 2, in_channels //
-                                                 2, 4, 2, 1) if self.up_sample else nn.Identity()
 
     def forward(self, x, out_down, t_emb):
         """
@@ -361,20 +354,26 @@ class Unet(nn.Module):
                 )
             )
 
+        # Initialize UpBlocks
         self.ups = nn.ModuleList([])
+        prev_channels = self.mid_channels[-1]
         for idx, i in enumerate(reversed(range(len(self.down_channels) - 1))):
+            skip_channels = self.down_channels[i]
+            out_channels = self.down_channels[i]
             self.ups.append(
                 UpBlock(
-                    in_channels=self.down_channels[i + 1] + self.down_channels[i],  # Adjusted line
-                    out_channels=self.down_channels[i],
+                    prev_channels=prev_channels,
+                    skip_channels=skip_channels,
+                    out_channels=out_channels,
                     t_emb_dim=self.t_emb_dim,
                     up_sample=self.up_sample[idx],
                     num_layers=self.num_up_layers
                 )
             )
+            prev_channels = out_channels  # Update for the next iteration
 
-        self.norm_out = nn.GroupNorm(8, 32)
-        self.conv_out = nn.Conv2d(32, im_channels, kernel_size=3, padding=1)
+        self.norm_out = nn.GroupNorm(8, self.down_channels[0])
+        self.conv_out = nn.Conv2d(self.down_channels[0], im_channels, kernel_size=3, padding=1)
 
     def forward(self, x, t):
         # Shapes assuming downblocks are [C1, C2, C3, C4]
