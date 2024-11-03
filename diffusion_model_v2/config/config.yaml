@@ -1,0 +1,55 @@
+data:
+  root_dir: 'data'
+  labels: 'data/gt'
+  images: 'data/rgb_anon'
+  train_split: 'train'
+  val_split: 'val'
+  weather: ['fog', 'rain']
+  transform:
+    resize_resolution: [270,480] # [768, 768]
+    target_resolution: [256,256] # [768, 768]
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+    horizontal_flip: 0.5
+
+diffusion:
+  num_timesteps : 1000
+  beta_start : 0.0001
+  beta_end : 0.02
+
+model:
+  name: 'ddpm'
+  im_channels : 3
+  im_size : 128
+  down_channels : [64, 128, 256, 512, 768] # should be changed
+  mid_channels : [768, 768, 512]
+  down_sample : [True, True, True, False]
+  time_emb_dim : 128
+  num_down_layers : 1
+  num_mid_layers : 1
+  num_up_layers : 1
+  num_heads : 4
+
+training:
+  device: 'cuda'
+  random_seed: 42
+  epochs: 100
+  batch_size: 8
+  num_workers: 0
+  lr: 0.0001
+  log_interval: 10
+  save_interval: 5
+  resume_training: False
+  resume_checkpoint: ''
+  task_name: 'default'
+  sample_size: 100
+  num_grid_rows : 10
+  ckpt_name: 'ddpm_ckpt.pth'
+
+
+folders:
+  output: 'diffusion_model/outputs'
+  weights: 'diffusion_model/weights'
+  logs: 'diffusion_model/logs'
+  checkpoints: 'diffusion_model/outputs/checkpoints'
+  samples: 'diffusion_model/outputs/samples'
