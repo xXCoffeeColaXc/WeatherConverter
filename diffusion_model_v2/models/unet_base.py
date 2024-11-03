@@ -62,7 +62,9 @@ class EfficientAttention(nn.Module):
 
 class DownBlock(nn.Module):
 
-    def __init__(self, in_channels, out_channels, t_emb_dim, down_sample=True, num_heads=4, num_layers=1):
+    def __init__(
+        self, in_channels, out_channels, t_emb_dim, down_sample=True, num_heads=4, num_layers=1, use_attn=True
+    ):
         """
         Down conv block with attention.
             1. Resnet block with time embedding
@@ -79,6 +81,7 @@ class DownBlock(nn.Module):
         """
         super().__init__()
         self.num_layers = num_layers
+        self.use_attn = use_attn
         self.down_sample = down_sample
         self.resnet_conv_first = nn.ModuleList(
             [
@@ -105,7 +108,17 @@ class DownBlock(nn.Module):
         )
         self.attention_norms = nn.ModuleList([nn.GroupNorm(8, out_channels) for _ in range(num_layers)])
 
-        self.attentions = nn.ModuleList([EfficientAttention(out_channels, num_heads) for _ in range(num_layers)])
+        if self.use_attn:
+            self.attention_norms = nn.ModuleList([nn.GroupNorm(8, out_channels) for _ in range(num_layers)])
+            self.attentions = nn.ModuleList(
+                [nn.MultiheadAttention(out_channels, num_heads, batch_first=True) for _ in range(num_layers)]
+            )
+            #self.attentions = nn.ModuleList([EfficientAttention(out_channels, num_heads) for _ in range(num_layers)])
+        else:
+            self.attention_norms = nn.ModuleList([nn.Identity() for _ in range(num_layers)])
+            self.attentions = nn.ModuleList([nn.Identity() for _ in range(num_layers)])
+
+        #self.attentions = nn.ModuleList([EfficientAttention(out_channels, num_heads) for _ in range(num_layers)])
         self.residual_input_conv = nn.ModuleList(
             [
                 nn.Conv2d(in_channels if i == 0 else out_channels, out_channels, kernel_size=1)
@@ -136,13 +149,15 @@ class DownBlock(nn.Module):
             out = out + self.residual_input_conv[i](resnet_input)
 
             # Attention block of Unet
-            batch_size, channels, h, w = out.shape
-            in_attn = out.reshape(batch_size, channels, h * w)
-            in_attn = self.attention_norms[i](in_attn)
-            in_attn = in_attn.transpose(1, 2)
-            out_attn = self.attentions[i](in_attn)
-            out_attn = out_attn.transpose(1, 2).reshape(batch_size, channels, h, w)
-            out = out + out_attn
+            if self.use_attn:
+                batch_size, channels, h, w = out.shape
+                in_attn = out.reshape(batch_size, channels, h * w)
+                in_attn = self.attention_norms[i](in_attn)
+                in_attn = in_attn.transpose(1, 2)
+                #out_attn = self.attentions[i](in_attn)
+                out_attn, _ = self.attentions[i](in_attn, in_attn, in_attn)
+                out_attn = out_attn.transpose(1, 2).reshape(batch_size, channels, h, w)
+                out = out + out_attn
 
         out = self.down_sample_conv(out)
         return out
@@ -150,7 +165,7 @@ class DownBlock(nn.Module):
 
 class MidBlock(nn.Module):
 
-    def __init__(self, in_channels, out_channels, t_emb_dim, num_heads=4, num_layers=1):
+    def __init__(self, in_channels, out_channels, t_emb_dim, num_heads=4, num_layers=1, use_attn=False):
         """
         Mid conv block with attention.
             Sequence of following blocks
@@ -167,6 +182,7 @@ class MidBlock(nn.Module):
         """
         super().__init__()
         self.num_layers = num_layers
+        self.use_attn = use_attn
         self.resnet_conv_first = nn.ModuleList(
             [
                 nn.Sequential(
@@ -191,9 +207,16 @@ class MidBlock(nn.Module):
             ]
         )
 
-        self.attention_norms = nn.ModuleList([nn.GroupNorm(8, out_channels) for _ in range(num_layers)])
+        if self.use_attn:
+            self.attention_norms = nn.ModuleList([nn.GroupNorm(8, out_channels) for _ in range(num_layers)])
+            self.attentions = nn.ModuleList(
+                [nn.MultiheadAttention(out_channels, num_heads, batch_first=True) for _ in range(num_layers)]
+            )
+            #self.attentions = nn.ModuleList([EfficientAttention(out_channels, num_heads) for _ in range(num_layers)])
+        else:
+            self.attention_norms = nn.ModuleList([nn.Identity() for _ in range(num_layers)])
+            self.attentions = nn.ModuleList([nn.Identity() for _ in range(num_layers)])
 
-        self.attentions = nn.ModuleList([EfficientAttention(out_channels, num_heads) for _ in range(num_layers)])
         self.residual_input_conv = nn.ModuleList(
             [
                 nn.Conv2d(in_channels if i == 0 else out_channels, out_channels, kernel_size=1)
@@ -224,13 +247,15 @@ class MidBlock(nn.Module):
         for i in range(self.num_layers):
 
             # Attention Block
-            batch_size, channels, h, w = out.shape
-            in_attn = out.reshape(batch_size, channels, h * w)
-            in_attn = self.attention_norms[i](in_attn)
-            in_attn = in_attn.transpose(1, 2)
-            out_attn = self.attentions[i](in_attn)
-            out_attn = out_attn.transpose(1, 2).reshape(batch_size, channels, h, w)
-            out = out + out_attn
+            if self.use_attn:
+                batch_size, channels, h, w = out.shape
+                in_attn = out.reshape(batch_size, channels, h * w)
+                in_attn = self.attention_norms[i](in_attn)
+                in_attn = in_attn.transpose(1, 2)
+                #out_attn = self.attentions[i](in_attn)
+                out_attn, _ = self.attentions[i](in_attn, in_attn, in_attn)
+                out_attn = out_attn.transpose(1, 2).reshape(batch_size, channels, h, w)
+                out = out + out_attn
 
             # Resnet Block
             resnet_input = out
@@ -244,7 +269,7 @@ class MidBlock(nn.Module):
 
 class UpBlock(nn.Module):
 
-    def __init__(self, in_channels, out_channels, t_emb_dim, up_sample=True, num_heads=4, num_layers=1):
+    def __init__(self, in_channels, out_channels, t_emb_dim, up_sample=True, num_heads=4, num_layers=1, use_attn=False):
         """
         Up conv block with attention.
             1. Upsample
@@ -263,6 +288,7 @@ class UpBlock(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         self.up_sample = up_sample
+        self.use_attn = use_attn
         self.resnet_conv_first = nn.ModuleList(
             [
                 nn.Sequential(
@@ -287,9 +313,16 @@ class UpBlock(nn.Module):
             ]
         )
 
-        self.attention_norms = nn.ModuleList([nn.GroupNorm(8, out_channels) for _ in range(num_layers)])
+        if self.use_attn:
+            self.attention_norms = nn.ModuleList([nn.GroupNorm(8, out_channels) for _ in range(num_layers)])
+            self.attentions = nn.ModuleList(
+                [nn.MultiheadAttention(out_channels, num_heads, batch_first=True) for _ in range(num_layers)]
+            )
+            #self.attentions = nn.ModuleList([EfficientAttention(out_channels, num_heads) for _ in range(num_layers)])
+        else:
+            self.attention_norms = nn.ModuleList([nn.Identity() for _ in range(num_layers)])
+            self.attentions = nn.ModuleList([nn.Identity() for _ in range(num_layers)])
 
-        self.attentions = nn.ModuleList([EfficientAttention(out_channels, num_heads) for _ in range(num_layers)])
         self.residual_input_conv = nn.ModuleList(
             [
                 nn.Conv2d(in_channels if i == 0 else out_channels, out_channels, kernel_size=1)
@@ -322,13 +355,15 @@ class UpBlock(nn.Module):
             out = self.resnet_conv_second[i](out)
             out = out + self.residual_input_conv[i](resnet_input)
 
-            batch_size, channels, h, w = out.shape
-            in_attn = out.reshape(batch_size, channels, h * w)
-            in_attn = self.attention_norms[i](in_attn)
-            in_attn = in_attn.transpose(1, 2)
-            out_attn = self.attentions[i](in_attn)
-            out_attn = out_attn.transpose(1, 2).reshape(batch_size, channels, h, w)
-            out = out + out_attn
+            if self.use_attn:
+                batch_size, channels, h, w = out.shape
+                in_attn = out.reshape(batch_size, channels, h * w)
+                in_attn = self.attention_norms[i](in_attn)
+                in_attn = in_attn.transpose(1, 2)
+                #out_attn = self.attentions[i](in_attn)
+                out_attn, _ = self.attentions[i](in_attn, in_attn, in_attn)
+                out_attn = out_attn.transpose(1, 2).reshape(batch_size, channels, h, w)
+                out = out + out_attn
 
         return out
 
@@ -349,6 +384,7 @@ class Unet(nn.Module):
         self.num_down_layers = model_config.num_down_layers
         self.num_mid_layers = model_config.num_mid_layers
         self.num_up_layers = model_config.num_up_layers
+        self.attn_resolutions = model_config.attn_resolutions
 
         assert self.mid_channels[0] == self.down_channels[-1]
         assert self.mid_channels[-1] == self.down_channels[-2]
@@ -364,33 +400,47 @@ class Unet(nn.Module):
 
         self.downs = nn.ModuleList([])
         for i in range(len(self.down_channels) - 1):
+            resolution = model_config.im_size // (2**i)
+            use_attn = resolution in self.attn_resolutions
             self.downs.append(
                 DownBlock(
                     self.down_channels[i],
                     self.down_channels[i + 1],
                     self.t_emb_dim,
                     down_sample=self.down_sample[i],
-                    num_layers=self.num_down_layers
+                    num_layers=self.num_down_layers,
+                    num_heads=model_config.num_heads if use_attn else 0,
+                    use_attn=use_attn
                 )
             )
 
         self.mids = nn.ModuleList([])
         for i in range(len(self.mid_channels) - 1):
+            use_attn = True
             self.mids.append(
                 MidBlock(
-                    self.mid_channels[i], self.mid_channels[i + 1], self.t_emb_dim, num_layers=self.num_mid_layers
+                    in_channels=self.mid_channels[i],
+                    out_channels=self.mid_channels[i + 1],
+                    t_emb_dim=self.t_emb_dim,
+                    num_layers=self.num_mid_layers,
+                    use_attn=use_attn,
+                    num_heads=model_config.num_heads if use_attn else 0
                 )
             )
 
         self.ups = nn.ModuleList([])
         for i in reversed(range(len(self.down_channels) - 1)):
+            resolution = model_config.im_size // (2**i)
+            use_attn = resolution in self.attn_resolutions
             self.ups.append(
                 UpBlock(
                     self.down_channels[i] * 2,
                     self.down_channels[i - 1] if i != 0 else self.down_channels[0],
                     self.t_emb_dim,
                     up_sample=self.down_sample[i],
-                    num_layers=self.num_up_layers
+                    num_layers=self.num_up_layers,
+                    num_heads=model_config.num_heads if use_attn else 0,
+                    use_attn=use_attn
                 )
             )
 

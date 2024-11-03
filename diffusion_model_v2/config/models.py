@@ -32,6 +32,7 @@ class ModelConfig(BaseModel):
     num_mid_layers: int
     num_up_layers: int
     num_heads: int
+    attn_resolutions: List[int]
 
 
 class FolderConfig(BaseModel):
