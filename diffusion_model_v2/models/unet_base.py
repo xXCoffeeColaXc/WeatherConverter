@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from diffusion_model_v2.config.models import ModelConfig
 
 
@@ -287,6 +288,9 @@ class UpBlock(nn.Module):
             torch.Tensor: Output tensor.
         """
         x = self.up_sample_conv(x)
+        # Resize out_down if necessary
+        if x.shape[2:] != out_down.shape[2:]:
+            out_down = F.interpolate(out_down, size=x.shape[2:], mode='nearest')
         x = torch.cat([x, out_down], dim=1)
 
         out = x
@@ -358,13 +362,13 @@ class Unet(nn.Module):
             )
 
         self.ups = nn.ModuleList([])
-        for i in reversed(range(len(self.down_channels) - 1)):
+        for idx, i in enumerate(reversed(range(len(self.down_channels) - 1))):
             self.ups.append(
                 UpBlock(
-                    self.down_channels[i] * 2,
-                    self.down_channels[i - 1] if i != 0 else 32,
-                    self.t_emb_dim,
-                    up_sample=self.down_sample[i],
+                    in_channels=self.down_channels[i + 1] + self.down_channels[i],  # Adjusted line
+                    out_channels=self.down_channels[i],
+                    t_emb_dim=self.t_emb_dim,
+                    up_sample=self.up_sample[idx],
                     num_layers=self.num_up_layers
                 )
             )
