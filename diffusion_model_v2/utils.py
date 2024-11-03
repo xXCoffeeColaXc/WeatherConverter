@@ -4,6 +4,7 @@ from PIL import Image
 from matplotlib import pyplot as plt
 import os
 
+
 def plot_images(images):
     """
     Plots a batch of images in a single grid.
@@ -19,6 +20,7 @@ def plot_images(images):
         torch.cat([i for i in images.cpu()], dim=-1),
     ], dim=-2).permute(1, 2, 0).cpu())
     plt.show()
+
 
 def save_images(images, path, **kwargs):
     """
@@ -36,6 +38,7 @@ def save_images(images, path, **kwargs):
     ndarr = grid.permute(1, 2, 0).to('cpu').numpy()
     im = Image.fromarray(ndarr)
     im.save(path)
+
 
 def create_run():
     checkpoint_path = './outputs/checkpoints'
@@ -55,6 +58,7 @@ def create_run():
 
     return run_dir
 
+
 def _find_max_run_id(checkpoint_path):
     max_run_id = 0
     if os.path.exists(checkpoint_path):
@@ -67,6 +71,7 @@ def _find_max_run_id(checkpoint_path):
                     pass  # Ignore directories with non-integer run numbers
 
     return max_run_id
+
 
 def create_folders(config):
     """
@@ -86,3 +91,9 @@ def create_folders(config):
         os.makedirs(config.result_dir)
 
 
+# Function to print memory usage
+def print_gpu_memory(stage):
+    device = 'cuda'
+    allocated = torch.cuda.memory_allocated(device) / (1024**3)
+    reserved = torch.cuda.memory_reserved(device) / (1024**3)
+    print(f"[{stage}] Allocated: {allocated:.2f} GB, Reserved: {reserved:.2f} GB")

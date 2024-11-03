@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from diffusion_model_v2.config.models import ModelConfig
+from utils import print_gpu_memory
 
 
 def get_time_embedding(time_steps, temb_dim):
@@ -449,14 +450,16 @@ if __name__ == '__main__':
     config = load_config('diffusion_model_v2/config/config.yaml')
 
     model = Unet(config.model)
+    print_gpu_memory("After model initialization")
 
     input_tensor = torch.randn(1, config.model.im_channels, config.model.im_size, config.model.im_size)
 
     t = (10,)
 
     try:
+        print_gpu_memory("Before forward pass")
         output = model(input_tensor, t)
         print(output.shape)
-
+        print_gpu_memory("After forward pass")
     except Exception as e:
         print(e)
