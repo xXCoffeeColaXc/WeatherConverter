@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from diffusion_model.config.models import ModelConfig
+from diffusion_model_v2.config.models import ModelConfig
 
 
 def get_time_embedding(time_steps, temb_dim):
@@ -382,7 +382,7 @@ class Unet(nn.Module):
         # B x C1 x H x W
 
         # t_emb -> B x t_emb_dim
-        t_emb = get_time_embedding(torch.as_tensor(t).long(), self.t_emb_dim)
+        t_emb = get_time_embedding(torch.as_tensor(t).long().to('cuda'), self.t_emb_dim)
         t_emb = self.t_proj(t_emb)
 
         down_outs = []
@@ -413,7 +413,7 @@ class Unet(nn.Module):
 
 
 if __name__ == '__main__':
-    from diffusion_model.config.models import Config
+    from diffusion_model_v2.config.models import Config
     import yaml
 
     def load_config(config_path: str) -> Config:
@@ -421,14 +421,20 @@ if __name__ == '__main__':
             config_data = yaml.safe_load(file)
         return Config(**config_data)
 
-    config = load_config('diffusion_model/config/config.yaml')
+    config = load_config('diffusion_model_v2/config/config.yaml')
 
     model = Unet(config.model)
 
+    model.to('cuda')
+
     input_tensor = torch.randn(1, config.model.im_channels, config.model.im_size, config.model.im_size)
+    input_tensor = input_tensor.to('cuda')
 
     t = (10,)
+    #t = torch.as_tensor(t).to('cuda')
 
-    output = model(input_tensor, t)
-
-    print(output.shape)
+    try:
+        output = model(input_tensor, t)
+        print(output.shape)
+    except Exception as e:
+        print(e)
