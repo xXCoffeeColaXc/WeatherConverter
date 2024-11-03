@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from diffusion_model_v2.config.models import ModelConfig
-from utils import print_gpu_memory
 
 
 def get_time_embedding(time_steps, temb_dim):
@@ -441,6 +440,13 @@ class Unet(nn.Module):
 if __name__ == '__main__':
     from diffusion_model_v2.config.models import Config
     import yaml
+
+    # Function to print memory usage
+    def print_gpu_memory(stage):
+        device = 'cuda'
+        allocated = torch.cuda.memory_allocated(device) / (1024**3)
+        reserved = torch.cuda.memory_reserved(device) / (1024**3)
+        print(f"[{stage}] Allocated: {allocated:.2f} GB, Reserved: {reserved:.2f} GB")
 
     def load_config(config_path: str) -> Config:
         with open(config_path, 'r') as file:
