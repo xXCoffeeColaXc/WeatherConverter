@@ -407,7 +407,7 @@ class Unet(nn.Module):
         # B x C1 x H x W
 
         # t_emb -> B x t_emb_dim
-        t_emb = get_time_embedding(torch.as_tensor(t).long(), self.t_emb_dim)
+        t_emb = get_time_embedding(torch.as_tensor(t).long().cuda(), self.t_emb_dim)
         t_emb = self.t_proj(t_emb)
 
         down_outs = []
@@ -456,10 +456,11 @@ if __name__ == '__main__':
     config = load_config('diffusion_model_v2/config/config.yaml')
 
     model = Unet(config.model)
+    model.to('cuda')
     print_gpu_memory("After model initialization")
 
     input_tensor = torch.randn(1, config.model.im_channels, config.model.im_size, config.model.im_size)
-
+    input_tensor = input_tensor.to('cuda')
     t = (10,)
 
     try:
