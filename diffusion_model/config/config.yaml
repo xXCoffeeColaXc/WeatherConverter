@@ -17,18 +17,18 @@ diffusion:
   beta_start : 0.0001
   beta_end : 0.02
 
-model:
-  name: 'ddpm'
-  im_channels : 3
-  im_size : 128
-  down_channels : [64, 128, 256, 512, 768] # should be changed
-  mid_channels : [768, 768, 512]
-  down_sample : [True, True, True, False]
-  time_emb_dim : 128
-  num_down_layers : 1
-  num_mid_layers : 1
-  num_up_layers : 1
-  num_heads : 4
+model_config:
+  im_channels: 3               # Number of input image channels (e.g., 3 for RGB)
+  im_size: 256                 # Updated image size
+  down_channels: [64, 128, 256, 512, 1024]  # Increased channels for deeper architecture
+  mid_channels: [1024, 1024, 512]          # Updated mid-section channels
+  down_sample: [True, True, True, True]    # 4 DownBlocks with downsampling
+  time_emb_dim: 256            # Increased time embedding dimension for larger model
+  num_down_layers: 2           # Number of ResNet layers per DownBlock
+  num_mid_layers: 2            # Number of ResNet layers per MidBlock
+  num_up_layers: 2             # Number of ResNet layers per UpBlock
+  num_heads: 8                 # Increased attention heads for larger feature maps
+  final_channels: 64           # Parameterized final channel size before output
 
 training:
   device: 'cuda'

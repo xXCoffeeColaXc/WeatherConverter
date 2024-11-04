@@ -6,8 +6,8 @@ training:
   num_workers: 0
   log_interval: 10 # iters
   save_interval: 5 # epochs
-  resume_training: False
-  resume_checkpoint: ''
+  resume_training: True
+  resume_checkpoint: 'seg_model/outputs/checkpoints/deeplabv3plus_resnet101_epoch_28.pth'
   loss_function:
     type: 'CrossEntropyLoss'
     params:
@@ -27,7 +27,7 @@ training:
     #   gamma: 0.1
 
 data:
-  root_dir: 'data'
+  root_dir: '/media/talmacsi/48a93eb4-f27d-48ec-9f74-64e475c3b6ff/Downloads/data'
   labels: 'data/gt'
   images: 'data/rgb_anon'
   train_split: 'train'
@@ -61,7 +61,7 @@ optimizer:
     classifier: 0.0001
 
 model:
-  path: 'seg_model/weights/best_deeplabv3plus_resnet101_cityscapes_os16.pth.tar'
+  path: 'seg_model/outputs/checkpoints/deeplabv3plus_resnet101_epoch_28.pth' #'seg_model/weights/best_deeplabv3plus_resnet101_cityscapes_os16.pth.tar'
   name: 'deeplabv3plus_resnet101'
   num_classes: 19
   output_stride: 16
