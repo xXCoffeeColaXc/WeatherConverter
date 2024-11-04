@@ -1,10 +1,10 @@
 training:
   device: 'auto'
   random_seed: 42
-  epochs: 5
-  batch_size: 2 # has to be >1
+  epochs: 20
+  batch_size: 8 # has to be >1
   num_workers: 0
-  log_interval: 5 # iters
+  log_interval: 10 # iters
   save_interval: 5 # epochs
   resume_training: True
   resume_checkpoint: 'seg_model/outputs/checkpoints/deeplabv3plus_resnet101_epoch_28.pth'
@@ -44,8 +44,8 @@ data:
       contrast: 0.2
       saturation: 0.2
     random_noise:
-      mean: 0.15
-      std_range: [0.0, 0.07]
+      mean: 0.1
+      std_range: [0.0, 0.05]
     class_wise_masking:
       p: 0.1
       num_classes_to_keep: 1
