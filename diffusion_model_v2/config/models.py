@@ -2,22 +2,18 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
 
-class TransformConfig(BaseModel):
-    resize_resolution: List[int] = Field(..., min_items=2, max_items=2)
-    target_resolution: List[int] = Field(..., min_items=2, max_items=2)
-    mean: List[float] = Field(..., min_items=3, max_items=3)
-    std: List[float] = Field(..., min_items=3, max_items=3)
-    horizontal_flip: float = Field(..., ge=0.0, le=1.0)
-
-
 class DataConfig(BaseModel):
     root_dir: str
     labels: str
     images: str
-    train_split: str
-    val_split: str
     weather: List[str]
-    transform: TransformConfig
+    image_size: List[int]
+
+
+class DiffusionConfig(BaseModel):
+    num_timesteps: int
+    beta_start: float
+    beta_end: float
 
 
 class ModelConfig(BaseModel):
@@ -52,16 +48,16 @@ class TrainingConfig(BaseModel):
     lr: float
     log_interval: int
     save_interval: int
+    sample_interval: int
     resume_training: bool
     resume_checkpoint: Optional[str] = None
-    task_name: str
     sample_size: int
     num_grid_rows: int
-    ckpt_name: str
 
 
 class Config(BaseModel):
     training: TrainingConfig
+    diffusion: DiffusionConfig
     data: DataConfig
     model: ModelConfig
     folders: FolderConfig

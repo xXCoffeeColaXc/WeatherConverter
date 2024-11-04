@@ -41,8 +41,8 @@ def save_images(images, path, **kwargs):
 
 
 def create_run():
-    checkpoint_path = './outputs/checkpoints'
-    sample_path = './outputs/samples'
+    checkpoint_path = 'diffusion_model_v2/outputs/checkpoints'
+    sample_path = 'diffusion_model_v2/outputs/samples'
     max_run_id = _find_max_run_id(checkpoint_path)
 
     new_run_id = max_run_id + 1
