@@ -453,7 +453,7 @@ class Unet(nn.Module):
         # Shapes assuming downsamples are [True, True, False]
         # B x C x H x W
         out = self.conv_in(x)
-        print("Shape after conv_in:", out.shape)
+        #print("Shape after conv_in:", out.shape)
         # B x C1 x H x W
 
         # t_emb -> B x t_emb_dim
@@ -465,25 +465,25 @@ class Unet(nn.Module):
         for idx, down in enumerate(self.downs):
             down_outs.append(out)
             out = down(out, t_emb)
-            print(f"Shape after downblock {idx+1}:", out.shape)
+            #print(f"Shape after downblock {idx+1}:", out.shape)
         # down_outs  [B x C1 x H x W, B x C2 x H/2 x W/2, B x C3 x H/4 x W/4]
         # out B x C4 x H/4 x W/4
 
         for mid in self.mids:
             out = mid(out, t_emb)
-            print("Shape after midblock:", out.shape)
+            #print("Shape after midblock:", out.shape)
         # out B x C3 x H/4 x W/4
 
         for up in self.ups:
             down_out = down_outs.pop()
             out = up(out, down_out, t_emb)
-            print("Shape after upblock:", out.shape)
+            #print("Shape after upblock:", out.shape)
             # out [B x C2 x H/4 x W/4, B x C1 x H/2 x W/2, B x 16 x H x W]
         out = self.norm_out(out)
         out = nn.SiLU()(out)
         out = self.conv_out(out)
         # out B x C x H x W
-        print("Final output shape:", out.shape)
+        #print("Final output shape:", out.shape)
         return out
 
 

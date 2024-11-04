@@ -7,19 +7,26 @@ from torchvision.utils import make_grid
 from tqdm import tqdm
 from models.unet_base import Unet
 from scheduler.linear_noise_scheduler import LinearNoiseScheduler
+from config.models import TrainingConfig, ModelConfig, DiffusionConfig, FolderConfig
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def sample(model, scheduler, train_config, model_config, diffusion_config):
+def sample(
+    model,
+    scheduler: LinearNoiseScheduler,
+    train_config: TrainingConfig,
+    model_config: ModelConfig,
+    diffusion_config: DiffusionConfig,
+    save_path: str = 'diffusion_model_v2/outputs/samples'
+):
     r"""
     Sample stepwise by going backward one timestep at a time.
     We save the x0 predictions
     """
-    xt = torch.randn(
-        (train_config['num_samples'], model_config['im_channels'], model_config['im_size'], model_config['im_size'])
-    ).to(device)
-    for i in tqdm(reversed(range(diffusion_config['num_timesteps']))):
+    xt = torch.randn((train_config.sample_size, model_config.im_channels, model_config.im_size, model_config.im_size)
+                    ).to(device)
+    for i in tqdm(reversed(range(diffusion_config.num_timesteps))):
         # Get prediction of noise
         noise_pred = model(xt, torch.as_tensor(i).unsqueeze(0).to(device))
 
@@ -29,11 +36,9 @@ def sample(model, scheduler, train_config, model_config, diffusion_config):
         # Save x0
         ims = torch.clamp(xt, -1., 1.).detach().cpu()
         ims = (ims + 1) / 2
-        grid = make_grid(ims, nrow=train_config['num_grid_rows'])
+        grid = make_grid(ims, nrow=train_config.num_grid_rows)
         img = torchvision.transforms.ToPILImage()(grid)
-        if not os.path.exists(os.path.join(train_config['task_name'], 'samples')):
-            os.mkdir(os.path.join(train_config['task_name'], 'samples'))
-        img.save(os.path.join(train_config['task_name'], 'samples', 'x0_{}.png'.format(i)))
+        img.save(os.path.join(save_path, 'x0_{}.png'.format(i)))
         img.close()
 
 
