@@ -39,13 +39,13 @@ def sample(
         # Use scheduler to get x0 and xt-1
         xt, x0_pred = scheduler.sample_prev_timestep(xt, noise_pred, torch.as_tensor(i).to(device))
 
-        # Save x0
-        ims = torch.clamp(xt, -1., 1.).detach().cpu()
-        ims = (ims + 1) / 2
-        grid = make_grid(ims, nrow=train_config.num_grid_rows)
-        img = torchvision.transforms.ToPILImage()(grid)
-        img.save(os.path.join(save_path, 'x0_{}.png'.format(i)))
-        img.close()
+    # Save x0
+    ims = torch.clamp(xt, -1., 1.).detach().cpu()
+    ims = (ims + 1) / 2
+    grid = make_grid(ims, nrow=train_config.num_grid_rows)
+    img = torchvision.transforms.ToPILImage()(grid)
+    img.save(os.path.join(save_path, 'x0_{}.png'.format(i)))
+    img.close()
 
 
 def infer(config: Config):

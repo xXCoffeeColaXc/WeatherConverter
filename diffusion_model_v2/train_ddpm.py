@@ -68,15 +68,20 @@ def load_checkpoint(model: Unet, opt: Adam, checkpoint_path: str):
 def train(
     dataloader: DataLoader, model: Unet, optimizer: Adam, criterion: torch.nn.MSELoss, scheduler: LinearNoiseScheduler
 ):
-
+    start_epoch = 1
     total_loss = 0.0
     interval_loss = 0.0
     num_batches = len(dataloader)
     num_epochs = config.training.epochs
     log_interval = config.training.log_interval
 
+    if config.training.resume_training:
+        model, optimizer, start_epoch = load_checkpoint(model, optimizer, config.training.resume_checkpoint)
+        num_epochs += start_epoch
+        print(f"Resuming training from epoch {start_epoch}")
+
     # Run training
-    for epoch_idx in range(1, num_epochs + 1):
+    for epoch_idx in range(start_epoch, num_epochs + 1):
         model.train()
         total_loss = 0.0
         interval_loss = 0.0
@@ -159,10 +164,6 @@ if __name__ == '__main__':
 
     optimizer = Adam(model.parameters(), lr=config.training.lr)
     criterion = torch.nn.MSELoss()
-
-    # if config.training.resume_training:
-    #     model, optimizer, start_epoch = load_checkpoint(model, optimizer, config.training.resume_checkpoint)
-    #     print(f"Resuming training from epoch {start_epoch}")
 
     setup_logger()
     try:
