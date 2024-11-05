@@ -44,7 +44,7 @@ def sample(
     ims = (ims + 1) / 2
     grid = make_grid(ims, nrow=train_config.num_grid_rows)
     img = torchvision.transforms.ToPILImage()(grid)
-    img.save(os.path.join(save_path, 'x0_{}.png'.format(i)))
+    img.save(os.path.join(save_path, 'x0.png'))
     img.close()
 
 
@@ -54,10 +54,10 @@ def infer(config: Config):
 
     # Load model with checkpoint
     model = Unet(config.model).to(device)
-    model.load_state_dict(
-        torch.load(os.path.join(config.folders.checkpoints, run_id, f'{epoch}-checkpoint.ckpt'), map_location=device)
-    )
+    checkpoint = torch.load(os.path.join(config.folders.checkpoints, f'run_{run_id}', f'{epoch}-checkpoint.ckpt'))
+    model.load_state_dict(torch.load(checkpoint['model_state_dict']))
     model.eval()
+    model = model.to(device)
 
     # Create the noise scheduler
     scheduler = LinearNoiseScheduler(
@@ -65,8 +65,10 @@ def infer(config: Config):
         beta_start=config.diffusion.beta_start,
         beta_end=config.diffusion.beta_end
     )
+    save_path = os.path.join(config.folders.samples, f'run_{run_id}')
+
     with torch.no_grad():
-        sample(model, scheduler, config.training, config.model, config.diffusion, config.folders.samples, run_id)
+        sample(model, scheduler, config.training, config.model, config.diffusion, save_path)
 
 
 if __name__ == '__main__':
