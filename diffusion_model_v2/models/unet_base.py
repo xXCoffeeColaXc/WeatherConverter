@@ -409,7 +409,7 @@ class Unet(nn.Module):
                     self.t_emb_dim,
                     down_sample=self.down_sample[i],
                     num_layers=self.num_down_layers,
-                    num_heads=model_config.num_heads if use_attn else 0,
+                    num_heads=model_config.num_heads,
                     use_attn=use_attn
                 )
             )
@@ -424,7 +424,7 @@ class Unet(nn.Module):
                     t_emb_dim=self.t_emb_dim,
                     num_layers=self.num_mid_layers,
                     use_attn=use_attn,
-                    num_heads=model_config.num_heads if use_attn else 0
+                    num_heads=model_config.num_heads
                 )
             )
 
@@ -439,7 +439,7 @@ class Unet(nn.Module):
                     self.t_emb_dim,
                     up_sample=self.down_sample[i],
                     num_layers=self.num_up_layers,
-                    num_heads=model_config.num_heads if use_attn else 0,
+                    num_heads=model_config.num_heads,
                     use_attn=use_attn
                 )
             )

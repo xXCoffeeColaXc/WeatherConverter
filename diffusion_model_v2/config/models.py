@@ -4,8 +4,11 @@ from typing import List, Optional, Dict, Any
 
 class DataConfig(BaseModel):
     root_dir: str
-    labels: str
-    images: str
+    acdc_dir: str
+    acdc_labels: str
+    acdc_images: str
+    bdd_dir: str
+    dawn_dir: str
     weather: List[str]
     image_size: List[int]
 

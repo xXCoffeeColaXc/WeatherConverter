@@ -37,25 +37,28 @@ def sample(
         noise_pred = model(xt, torch.as_tensor(i).unsqueeze(0).to(device))
 
         # Use scheduler to get x0 and xt-1
-        xt, x0_pred = scheduler.sample_prev_timestep(xt, noise_pred, torch.as_tensor(i).to(device))
+        xt, x0 = scheduler.sample_prev_timestep(xt, noise_pred, torch.as_tensor(i).to(device))
 
     # Save x0
-    ims = torch.clamp(xt, -1., 1.).detach().cpu()
+    ims = torch.clamp(x0, -1., 1.).detach().cpu()
     ims = (ims + 1) / 2
     grid = make_grid(ims, nrow=train_config.num_grid_rows)
     img = torchvision.transforms.ToPILImage()(grid)
-    img.save(os.path.join(save_path, 'x0.png'))
+    #img = torchvision.transforms.ToPILImage()(ims[0])
+    img.save(os.path.join(save_path, 'x9.png'))
     img.close()
 
 
 def infer(config: Config):
     run_id = 3
-    epoch = 60
+    epoch = 380
 
     # Load model with checkpoint
     model = Unet(config.model).to(device)
-    checkpoint = torch.load(os.path.join(config.folders.checkpoints, f'run_{run_id}', f'{epoch}-checkpoint.ckpt'))
-    model.load_state_dict(torch.load(checkpoint['model_state_dict']))
+    checkpoint_path = os.path.join(config.folders.checkpoints, f'{epoch}-checkpoint.ckpt')
+    print(f'Loading checkpoint from {checkpoint_path}...')
+    checkpoint = torch.load(checkpoint_path)
+    model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
     model = model.to(device)
 
@@ -65,10 +68,13 @@ def infer(config: Config):
         beta_start=config.diffusion.beta_start,
         beta_end=config.diffusion.beta_end
     )
-    save_path = os.path.join(config.folders.samples, f'run_{run_id}')
+    save_path = config.folders.samples
 
     with torch.no_grad():
-        sample(model, scheduler, config.training, config.model, config.diffusion, save_path)
+        try:
+            sample(model, scheduler, config.training, config.model, config.diffusion, save_path)
+        except Exception as e:
+            print(e)
 
 
 if __name__ == '__main__':

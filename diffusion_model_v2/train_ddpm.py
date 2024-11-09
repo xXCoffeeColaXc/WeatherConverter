@@ -5,7 +5,7 @@ import numpy as np
 import wandb
 from tqdm import tqdm
 from torch.optim import Adam
-from dataloader import get_loader
+from dataloader import ACDCDataset, get_loader
 from torch.utils.data import DataLoader
 from models.unet_base import Unet
 from scheduler.linear_noise_scheduler import LinearNoiseScheduler
@@ -13,6 +13,8 @@ from config.models import Config
 import random
 from utils import create_run
 from sample_ddpm import sample
+from torchvision import transforms
+from pathlib import Path
 
 
 def load_config(config_path: str) -> Config:
@@ -128,10 +130,10 @@ def train(
         print(f'Finished epoch: {epoch_idx} | Average Loss: {avg_epoch_loss:.4f}')
         wandb.log({"average_epoch_loss": avg_epoch_loss, "epoch": epoch_idx})
 
-        # Sample images
-        if epoch_idx % config.training.sample_interval == 0:
-            save_path = os.path.join(config.folders.samples, run_id)
-            sample(model, scheduler, config.training, config.model, config.diffusion, save_path)
+        # # Sample images
+        # if epoch_idx % config.training.sample_interval == 0:
+        #     save_path = os.path.join(config.folders.samples, run_id)
+        #     sample(model, scheduler, config.training, config.model, config.diffusion, save_path)
 
         # Save model checkpoints
         if epoch_idx % config.training.save_interval == 0:
@@ -143,6 +145,18 @@ def train(
 
 if __name__ == '__main__':
 
+    # Create Datalaoders
+    train_transform = transforms.Compose(
+        [
+            transforms.Resize(config.data.image_size, transforms.InterpolationMode.BILINEAR
+                             ),  # Resize the smallest side to 128 and maintain aspect ratio
+            transforms.RandomCrop(config.data.image_size),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Lambda(lambd=lambda x: x * 2.0 - 1.0),  # Normalize to [-1, 1]
+        ]
+    )
+
     # Create the noise scheduler
     scheduler = LinearNoiseScheduler(
         num_timesteps=config.diffusion.num_timesteps,
@@ -150,12 +164,22 @@ if __name__ == '__main__':
         beta_end=config.diffusion.beta_end
     )
 
-    dataloader = get_loader(
-        image_dir=os.path.join(config.data.root_dir, config.data.images),
-        selected_attrs=config.data.weather,
-        image_size=config.data.image_size,
-        batch_size=config.training.batch_size,
-        num_workers=config.training.num_workers
+    root_dir = Path(config.data.root_dir)
+
+    acdc_image_dir = root_dir / config.data.acdc_images
+    dataset = ACDCDataset(acdc_image_dir, config.data.weather, transform=train_transform)
+
+    # add bdd images
+    bdd_image_dir = root_dir / config.data.bdd_dir
+    dataset.add_images(bdd_image_dir)
+
+    # add dawn images
+    dawn_image_dir = root_dir / config.data.dawn_dir
+    dataset.add_images(dawn_image_dir)
+    print(dataset.__len__())
+
+    data_loader = DataLoader(
+        dataset=dataset, batch_size=config.training.batch_size, shuffle=True, num_workers=config.training.num_workers
     )
 
     # Instantiate the model
@@ -167,6 +191,6 @@ if __name__ == '__main__':
 
     setup_logger()
     try:
-        train(dataloader, model, optimizer, criterion, scheduler)
+        train(data_loader, model, optimizer, criterion, scheduler)
     except Exception as e:
         print(e)
