@@ -27,9 +27,9 @@ training:
     #   gamma: 0.1
 
 data:
-  root_dir: '/media/talmacsi/48a93eb4-f27d-48ec-9f74-64e475c3b6ff/Downloads/data'
-  labels: 'data/gt'
-  images: 'data/rgb_anon'
+  root_dir: '/media/talmacsi/48a93eb4-f27d-48ec-9f74-64e475c3b6ff/Downloads/data/ACDC'
+  labels: 'gt'
+  images: 'rgb_anon'
   train_split: 'train'
   val_split: 'val'
   weather: ['fog', 'rain']

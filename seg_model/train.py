@@ -1,23 +1,24 @@
-import network
 import torch
 from PIL import Image
 import torchvision.transforms as T
 import numpy as np
 import utils
-from datasets.acdc import ACDCDataset
 from torch.utils.data import DataLoader
 import random
 import yaml
 from typing import Union
-from utils.ext_transforms import *
-from utils.utils import create_run, denormalize, print_class_iou
 from typing import Optional, Union, List, Tuple, Dict, Any, Callable
 from tqdm import tqdm
-from metrics.stream_metrics import StreamSegMetrics
-from config.models import Config
 import wandb
 import os
 import matplotlib.pyplot as plt
+
+import seg_model.network as network
+from seg_model.config.models import Config
+from seg_model.utils.ext_transforms import *
+from seg_model.utils.utils import create_run, denormalize, print_class_iou
+from seg_model.metrics.stream_metrics import StreamSegMetrics
+from seg_model.datasets.acdc import ACDCDataset
 
 
 def load_config(config_path: str) -> Config:

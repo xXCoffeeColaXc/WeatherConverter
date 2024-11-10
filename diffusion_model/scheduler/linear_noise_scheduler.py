@@ -77,4 +77,4 @@ class LinearNoiseScheduler:
             # variance = self.betas[t]
             # sigma = variance**0.5
             # z = torch.randn(xt.shape).to(xt.device)
-            return mean + sigma * z, x0
+            return mean, sigma * z, x0

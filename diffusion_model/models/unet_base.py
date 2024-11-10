@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from diffusion_model_v2.config.models import ModelConfig
+
+from diffusion_model.config.models import ModelConfig
 
 
 def get_time_embedding(time_steps, temb_dim):
@@ -488,7 +489,7 @@ class Unet(nn.Module):
 
 
 if __name__ == '__main__':
-    from diffusion_model_v2.config.models import Config
+    from diffusion_model.config.models import Config
     import yaml
 
     # Function to print memory usage

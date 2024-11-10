@@ -1,50 +1,47 @@
 data:
   root_dir: 'data'
-  labels: 'data/gt'
-  images: 'data/rgb_anon'
-  train_split: 'train'
-  val_split: 'val'
+  acdc_dir: 'ACDC'
+  acdc_labels: 'ACDC/gt'
+  acdc_images: 'ACDC/rgb_anon'
+  bdd_dir: 'BDD'
+  dawn_dir: 'DAWN'
   weather: ['fog', 'rain']
-  transform:
-    resize_resolution: [270,480] # [768, 768]
-    target_resolution: [256,256] # [768, 768]
-    mean: [0.485, 0.456, 0.406]
-    std: [0.229, 0.224, 0.225]
-    horizontal_flip: 0.5
+  image_size : [128, 128]
 
 diffusion:
   num_timesteps : 1000
   beta_start : 0.0001
   beta_end : 0.02
 
-model_config:
-  im_channels: 3               # Number of input image channels (e.g., 3 for RGB)
-  im_size: 256                 # Updated image size
-  down_channels: [64, 128, 256, 512, 1024]  # Increased channels for deeper architecture
-  mid_channels: [1024, 1024, 512]          # Updated mid-section channels
-  down_sample: [True, True, True, True]    # 4 DownBlocks with downsampling
-  time_emb_dim: 256            # Increased time embedding dimension for larger model
-  num_down_layers: 2           # Number of ResNet layers per DownBlock
-  num_mid_layers: 2            # Number of ResNet layers per MidBlock
-  num_up_layers: 2             # Number of ResNet layers per UpBlock
-  num_heads: 8                 # Increased attention heads for larger feature maps
-  final_channels: 64           # Parameterized final channel size before output
+model:
+  name: 'ddpm'
+  im_channels : 3
+  im_size : 128
+  down_channels : [64, 128, 256, 512, 768] # should be changed
+  mid_channels : [768, 768, 512]
+  down_sample : [True, True, True, False]
+  time_emb_dim : 128
+  num_down_layers : 2
+  num_mid_layers : 2
+  num_up_layers : 2
+  num_heads : 4
+  attn_resolutions : [8, 16, 32, 64]
 
 training:
   device: 'cuda'
   random_seed: 42
-  epochs: 100
-  batch_size: 8
+  epochs: 200
+  batch_size: 4
   num_workers: 0
   lr: 0.0001
   log_interval: 10
-  save_interval: 5
+  save_interval: 10
+  sample_interval: 1000000000
   resume_training: False
   resume_checkpoint: ''
-  task_name: 'default'
-  sample_size: 100
-  num_grid_rows : 10
-  ckpt_name: 'ddpm_ckpt.pth'
+  sample_size: 2
+  num_grid_rows : 1
+
 
 
 folders:

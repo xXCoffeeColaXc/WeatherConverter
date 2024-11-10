@@ -2,7 +2,8 @@ from torchvision.transforms.functional import normalize
 import torch.nn as nn
 import numpy as np
 import os
-from datasets.acdc import ACDCDataset
+from seg_model.datasets.acdc import ACDCDataset
+
 
 def denormalize(tensor, mean, std):
     mean = np.array(mean)
