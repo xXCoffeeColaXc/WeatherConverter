@@ -21,7 +21,7 @@ def preprocess(input_image_path: str) -> torch.Tensor:
     transform = transforms.Compose(
         [
             transforms.Resize((1080 // 8, 1920 // 8)),
-            transforms.RandomCrop((crop_size, crop_size)),
+            transforms.CenterCrop((crop_size, crop_size)),
             transforms.ToTensor(),
         ]
     )

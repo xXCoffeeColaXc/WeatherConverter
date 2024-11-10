@@ -13,79 +13,82 @@ from PIL import Image
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def debug_tensor(tensor: torch.Tensor, path: str):
+def debug_tensor(tensor: torch.Tensor, path: str, title: str = None):
+    if title:
+        print(title)
+
     print(f"Tensor shape: {tensor.shape}")
-    print(f"Tensor min: {tensor.min()}")
-    print(f"Tensor max: {tensor.max()}")
+    print(f"Tensor min: {tensor.min().item()}")
+    print(f"Tensor max: {tensor.max().item()}")
     print(f"Tensor device: {tensor.device}")
 
-    # Save tensor as image
-    tensor = tensor.squeeze(0).cpu()
-    tensor = torch.clamp(tensor, 0, 1)
-    tensor: Image.Image = transforms.ToPILImage()(tensor)
-    tensor.save(path)
+    if tensor.ndim == 4 and tensor.shape[1] == 3:
+        tensor = tensor.squeeze(0)  # [3, 128, 128]
+        tensor = torch.clamp(tensor, -1., 1.).detach().cpu()
+        tensor = (tensor + 1) / 2
+    elif tensor.ndim == 3 and tensor.shape[0] == 1:
+        tensor = tensor.float()
+        print(f"Tensor unique values: {tensor.unique()}")
+
+    # Convert the tensor to a PIL Image
+    pil_image = transforms.ToPILImage()(tensor)
+    pil_image.save(path)
+
+    print(f"Image saved to {path}")
+    print('-' * 50)
 
 
-def visualize_result(x0: torch.Tensor, input_tensor: torch.Tensor, lbl_colored_img: torch.Tensor):
+def visualize_result(output_tensor: torch.Tensor, input_tensor: torch.Tensor, lbl_colored_img: torch.Tensor):
     pass
 
 
 def sample_with_sgg(
-    input_tensor: torch.Tensor,
+    input_tensor: torch.Tensor,  # [1, 3, 128, 128] normalized to [-1, 1]
     diff_model: torch.nn.Module,
-    scheduler: LinearNoiseScheduler,
-    diffusion_config: ddpm.Config,
+    diff_scheduler: LinearNoiseScheduler,
     seg_model: torch.nn.Module,
-    gt: torch.Tensor,
+    gt: torch.Tensor,  # [1, 512, 512] encoded label (0-18 values)
     srgan_model: torch.nn.Module,
 ) -> torch.Tensor:
 
-    lambda_gsg = 60.0
-    lambda_lcg = 60.0
-    N = 500  # 1000 steps (400 foward, 600 backward)
+    LAMBDA = 60.0
+    N = 500
 
-    x_noise = torch.randn(
-        (
-            diffusion_config.training.sample_size,
-            diffusion_config.model.im_channels,
-            diffusion_config.model.im_size,
-            diffusion_config.model.im_size
-        )
-    ).to(device)
-    debug_tensor(x_noise, 'debug/x_noise.png')
+    #debug_tensor(input_tensor, 'debug/input.png', 'input_tensor')
+    #debug_tensor(gt, 'debug/gt.png', 'gt')
 
     # --------- FORWARD PROCESS ------------
     # add noise to input image for N steps
     t = torch.randint(0, N, (input_tensor.shape[0],)).to(device)
     noise = torch.randn_like(input_tensor).to(device)
-    xt = scheduler.add_noise(xt, noise, t)
+    xt = diff_scheduler.add_noise(input_tensor, noise, t)
 
-    debug_tensor(xt, f'debug/xt_{N}_noised.png')
+    #debug_tensor(xt, f'debug/xt_{N}_noised.png', 'xt_noised')
 
     # --------- REVERSE PROCESS ------------
     for i in tqdm(reversed(range(N))):
-        print(f"Step {i}")
+        #print(f"Step {i}")
 
         # Get prediction of noise
         noise_pred = diff_model(xt, torch.as_tensor(i).unsqueeze(0).to(device))
-        debug_tensor(noise_pred, f'debug/noise_pred_{i}.png')
+        #debug_tensor(noise_pred, f'debug/noise_pred_{i}.png', 'noise_pred')
 
         # Use scheduler to get x0 and xt-1
-        mean, sigma, x0 = scheduler.sample_prev_timestep(xt, noise_pred, torch.as_tensor(i).to(device))
+        mu, sigma, _ = diff_scheduler.sample_prev_timestep(xt, noise_pred, torch.as_tensor(i).to(device))
 
-        # # Upscale x to 512x512
-        # sr_xt = srgan_infer.inference(srgan_model, xt)
+        # Upscale xt to 512x512
+        sr_xt = srgan_infer.inference(srgan_model, xt)
 
-        # # Apply SGG (returns 128x128 scaled gradients)
-        # if i % 2 == 0:
-        #     grads = apply_lcg(seg_model, sr_xt, gt, lambda_lcg)
-        # elif i % 2 == 1:
-        #     grads = apply_gsg(seg_model, sr_xt, gt, lambda_gsg)
+        # Apply SGG
+        if i % 2 == 0 and i != 0:
+            xt = apply_lcg(seg_model, mu, sigma, sr_xt, gt, LAMBDA)
+        elif i % 2 == 1 and i != 0:
+            xt = apply_gsg(seg_model, mu, sigma, sr_xt, gt, LAMBDA)
 
-        # Update xt with the gradients
-        #xt = mean * grads + sigma
-        xt = mean + sigma
-        debug_tensor(xt, f'debug/xt_{i}.png')
+        if i == 0:
+            xt = mu + sigma
+
+        #debug_tensor(xt, f'debug/xt_{i}.png', 'xt')
 
     # Upscale x0 to 512x512
     sr_x0 = srgan_infer.inference(srgan_model, xt)
@@ -96,13 +99,13 @@ def sample_with_sgg(
 if __name__ == '__main__':
 
     # ---------- Load Diffusion Model ----------
-    diff_config = ddpm.load_config('diffusion_model_v2/config/config.yaml')
+    diff_config = ddpm.load_config('diffusion_model/config/config.yaml')
     diff_checkpoint_path = os.path.join(diff_config.folders.checkpoints, f'20-checkpoint.ckpt')
     diff_model = ddpm.load_model(diff_checkpoint_path, diff_config.model)
     diff_scheduler = ddpm.load_scheduler(diff_config.diffusion)
 
     # ---------- Load SRGAN Model ----------
-    srgan_model_path = 'srgan_model/outputs/checkpoints/srgan_epoch_100.pth'
+    srgan_model_path = '/media/talmacsi/48a93eb4-f27d-48ec-9f74-64e475c3b6ff/Downloads/swift_srgan_4x.pth.tar'
     srgan_model = srgan_infer.load_model(srgan_model_path)
 
     # ---------- Load Segment Model ----------
@@ -113,22 +116,23 @@ if __name__ == '__main__':
     # ---------- Load Test Data ----------
     rgb_anon_path = Path(seg_config.data.root_dir) / seg_config.data.images
     gt_path = Path(seg_config.data.root_dir) / seg_config.data.labels
-    gt_label_ids_path = str(gt_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_gt_labelIds.png')
-    gt_color_path = str(gt_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_gt_labelColor.png')
+    gt_label_ids_path = str(gt_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_gt_labelIds.png')  # (0-32 values)
+    gt_color_path = str(gt_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_gt_labelColor.png')  # (RGB values)
     input_image_path = str(rgb_anon_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_rgb_anon.png')
     input_image = Image.open(input_image_path).convert("RGB")
 
     # ---------- Preprocess Test Data ----------
-    input_tensor_512, decoded_label_tensor_512, lbl_colored_img_512 = seg_infer.preprocess(input_image_path, gt_label_ids_path, gt_color_path)
-    val_transform = transforms.Compose(
+    _, input_tensor_512, encoded_label_tensor_512, lbl_colored_img_512 = seg_infer.preprocess(ori_img_path=input_image_path, img_path=input_image_path, gt_label_ids_path=gt_label_ids_path, gt_color_path=gt_color_path)
+
+    input_transform = transforms.Compose(
         [
-            transforms.Resize(diff_config.data.image_size, transforms.InterpolationMode.BILINEAR
-                             ),  # Resize the smallest side to 128 and maintain aspect ratio
+            transforms.Resize(diff_config.data.image_size, transforms.InterpolationMode.BILINEAR),
             transforms.RandomCrop(diff_config.data.image_size),
-            transforms.ToTensor(),  #transforms.Lambda(lambd=lambda x: x * 2.0 - 1.0),  # Normalize to [-1, 1]
+            transforms.ToTensor(),
+            transforms.Lambda(lambd=lambda x: x * 2.0 - 1.0),  # Normalize to [-1, 1]
         ]
     )
-    input_tensor_128: torch.Tensor = val_transform(input_image).unsqueeze(0).to(device)  # [1, 3, 128, 128]
+    input_tensor_128: torch.Tensor = input_transform(input_image).unsqueeze(0).to(device)  # [1, 3, 128, 128]
 
     # ---------- Run translation ----------
     try:
@@ -136,14 +140,13 @@ if __name__ == '__main__':
             input_tensor=input_tensor_128,
             diff_model=diff_model,
             diff_scheduler=diff_scheduler,
-            diff_config=diff_config,
             seg_model=seg_model,
-            gt=decoded_label_tensor_512,
+            gt=encoded_label_tensor_512,
             srgan_model=srgan_model
         )
     except Exception as e:
         print(e)
 
-    debug_tensor(output_tensor_512, 'debug/output_512.png')
+    debug_tensor(output_tensor_512, 'debug/output_512.png', 'output_512')
 
     #visualize_result(output_tensor_512, input_tensor_512, lbl_colored_img_512)

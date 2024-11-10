@@ -53,11 +53,11 @@ class LinearNoiseScheduler:
         :return:
         """
         #x0 = xt - sqrt(1 - alpha) * noise_pred / sqrt(alpha)
-        x0 = (
-            (xt - (self.sqrt_one_minus_alpha_cum_prod.to(xt.device)[t] * noise_pred)) /
-            torch.sqrt(self.alpha_cum_prod.to(xt.device)[t])
-        )
-        x0 = torch.clamp(x0, -1., 1.)
+        # x0 = (
+        #     (xt - (self.sqrt_one_minus_alpha_cum_prod.to(xt.device)[t] * noise_pred)) /
+        #     torch.sqrt(self.alpha_cum_prod.to(xt.device)[t])
+        # )
+        # x0 = torch.clamp(x0, -1., 1.)
 
         # mean = 1/sqrt(alpha) * (xt - (1-alpha)/(sqrt(1-alpha_hat)) * noise_pred)
         mean = xt - ((self.betas.to(xt.device)[t]) * noise_pred) / (self.sqrt_one_minus_alpha_cum_prod.to(xt.device)[t])
@@ -65,7 +65,7 @@ class LinearNoiseScheduler:
         mean = mean / torch.sqrt(self.alphas.to(xt.device)[t])
 
         if t == 0:
-            return mean, x0
+            return mean, None, None
         else:
             #variance = self.betas[t]
             variance = (1 - self.alpha_cum_prod.to(xt.device)[t - 1]) / (1.0 - self.alpha_cum_prod.to(xt.device)[t])
@@ -77,4 +77,4 @@ class LinearNoiseScheduler:
             # variance = self.betas[t]
             # sigma = variance**0.5
             # z = torch.randn(xt.shape).to(xt.device)
-            return mean, sigma * z, x0
+            return mean, sigma * z, None

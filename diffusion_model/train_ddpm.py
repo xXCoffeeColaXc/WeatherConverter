@@ -15,7 +15,6 @@ from diffusion_model.models.unet_base import Unet
 from diffusion_model.scheduler.linear_noise_scheduler import LinearNoiseScheduler
 from diffusion_model.config.models import Config
 from diffusion_model.utils import create_run
-from diffusion_model.sample_ddpm import sample
 
 
 def load_config(config_path: str) -> Config:
@@ -24,9 +23,9 @@ def load_config(config_path: str) -> Config:
     return Config(**config_data)
 
 
-config = load_config('diffusion_model_v2/config/config.yaml')
-run_id = create_run()
-
+config = load_config('diffusion_model/config/config.yaml')
+#run_id = create_run()
+run_id = 0
 # Setup random seed
 random_seed = config.training.random_seed
 torch.manual_seed(random_seed)

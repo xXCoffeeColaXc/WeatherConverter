@@ -5,6 +5,7 @@ import yaml
 import matplotlib.pyplot as plt
 from pathlib import Path
 from torchvision import transforms as T
+import torch.nn.functional as F
 
 import seg_model.network as network
 from seg_model.datasets.acdc import ACDCDataset
@@ -52,10 +53,11 @@ def compute_gradient_magnitude(
     return torch.from_numpy(gradient_magnitude)
 
 
-def preprocess(img_path: str, gt_label_ids_path: str,
-               gt_color_path: str) -> tuple[torch.Tensor, torch.Tensor, Image.Image]:
+def preprocess(ori_img_path: str, img_path: str, gt_label_ids_path: str,
+               gt_color_path: str) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, Image.Image]:
     # Load your image
     img = Image.open(img_path).convert("RGB")
+    ori_img = Image.open(ori_img_path).convert("RGB")
     label = Image.open(gt_label_ids_path)
     lable_colored = Image.open(gt_color_path)
 
@@ -69,31 +71,40 @@ def preprocess(img_path: str, gt_label_ids_path: str,
     )
 
     val_color_transform = T.Compose(
+        [
+            T.Resize(size=(1080 // 2, 1920 // 2), interpolation=Image.BILINEAR),
+            T.CenterCrop(size=(512, 512))
+            #T.UpSample(size=(512, 512), scale_factor=None, mode='bilinear', align_corners=None)
+        ]
+    )
+
+    val_ori_transform = T.Compose(
         [T.Resize(size=(1080 // 2, 1920 // 2), interpolation=Image.BILINEAR), T.CenterCrop(size=(512, 512))]
     )
 
     # Apply transformations
     input_tensor, lbl_tensor = val_transform(img, label)
     lbl_colored_img = val_color_transform(lable_colored)
-    print(type(input_tensor), type(lbl_tensor), type(lbl_colored_img))
+    original_image = val_ori_transform(ori_img)
+    #print(type(input_tensor), type(lbl_tensor), type(lbl_colored_img))
     # Prepare tensors for the model
     input_tensor = input_tensor.unsqueeze(0).to(device)
 
-    print(f"Unique values in label tensor: {torch.unique(lbl_tensor)}")
+    #print(f"Unique values in label tensor: {torch.unique(lbl_tensor)}")
 
-    decoded_label = ACDCDataset.encode_target(lbl_tensor)
-    decoded_label_tensor = torch.from_numpy(np.array(decoded_label)).unsqueeze(0).long().to(device)
-    print(f"Unique values in label tensor: {torch.unique(decoded_label_tensor)}")
+    encoded_label = ACDCDataset.encode_target(lbl_tensor)
+    encoded_label_tensor = torch.from_numpy(np.array(encoded_label)).unsqueeze(0).long().to(device)
+    #print(f"Unique values in label tensor: {torch.unique(encoded_label_tensor)}")
 
-    print(f"Input Tensor Shape: {input_tensor.shape}")
-    print(f"Label Tensor Shape: {decoded_label_tensor.shape}")
-    print(f"Label Image Shape: {lbl_colored_img.size}")
+    # print(f"Input Tensor Shape: {input_tensor.shape}")
+    #print(f"Label Tensor Shape: {encoded_label_tensor.shape}")
+    # print(f"Label Image Shape: {lbl_colored_img.size}")
 
-    return input_tensor, decoded_label_tensor, lbl_colored_img
+    return original_image, input_tensor, encoded_label_tensor, lbl_colored_img
 
 
 def infer(model: torch.nn.Module, input_tensor: torch.Tensor,
-          decoded_label_tensor: torch.Tensor) -> tuple[np.ndarray, torch.Tensor, np.ndarray]:
+          encoded_label_tensor: torch.Tensor) -> tuple[np.ndarray, torch.Tensor, np.ndarray]:
 
     # NOTE: The batch dimension should be 1 !!!
     criterion = torch.nn.CrossEntropyLoss(ignore_index=255)
@@ -116,7 +127,7 @@ def infer(model: torch.nn.Module, input_tensor: torch.Tensor,
 
     print(f"Predicted tensor shape: {pred.shape}")
 
-    loss = criterion(output, decoded_label_tensor.squeeze(1))  # Shape [1, 512, 512]
+    loss = criterion(output, encoded_label_tensor.squeeze(1))  # Shape [1, 512, 512]
 
     loss.backward()
 
@@ -126,7 +137,14 @@ def infer(model: torch.nn.Module, input_tensor: torch.Tensor,
     return pred, input_gradients, gradients_np
 
 
-def visualize_samples(input_tensor: torch.Tensor, pred: np.ndarray, lbl_colored_img: Image.Image) -> None:
+def visualize_samples(
+    original_image: Image.Image,
+    input_tensor: torch.Tensor,
+    pred: np.ndarray,
+    gradient_magnitude_avg_128: np.ndarray,
+    encoded_label_tensor: torch.Tensor,
+    lbl_colored_img: Image.Image
+) -> None:
     denorm = Denormalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
     # Convert input tensor to numpy array for visualization
@@ -138,25 +156,42 @@ def visualize_samples(input_tensor: torch.Tensor, pred: np.ndarray, lbl_colored_
     colorized_preds = ACDCDataset.decode_target(pred).astype('uint8')
     colorized_preds = Image.fromarray(colorized_preds)
 
+    encoded_label_tensor = encoded_label_tensor.squeeze(0).cpu().numpy()
+
     # Plotting the input image, predictions, and ground truth
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    fig, axes = plt.subplots(1, 6, figsize=(18, 6))
 
     # Display input image
-    axes[0].imshow(image_np)
-    axes[0].set_title('Resized Image')
+    axes[0].imshow(original_image)
+    axes[0].set_title('Original image')
     axes[0].axis('off')
 
-    # Display colorized predictions
-    axes[1].imshow(colorized_preds)
-    axes[1].set_title('Colorized Predictions')
+    # Display input image
+    axes[1].imshow(image_np)
+    axes[1].set_title('SRGAN image')
     axes[1].axis('off')
 
-    # Display ground truth labels
-    axes[2].imshow(lbl_colored_img)
-    axes[2].set_title('Ground Truth')
+    # Display colorized predictions
+    axes[2].imshow(colorized_preds)
+    axes[2].set_title('Colorized Predictions')
     axes[2].axis('off')
 
-    plt.savefig('seg_model/outputs/pred_plot.png')  # TODO: add unique name
+    # Display gradient magnitude
+    axes[3].imshow(gradient_magnitude_avg_128, cmap='hot')
+    axes[3].set_title('Gradient Magnitude')
+    axes[3].axis('off')
+
+    # Display decoded label tensor
+    axes[4].imshow(encoded_label_tensor)
+    axes[4].set_title('Encoded Label Tensor')
+    axes[4].axis('off')
+
+    # Display ground truth labels
+    axes[5].imshow(lbl_colored_img)
+    axes[5].set_title('Ground Truth')
+    axes[5].axis('off')
+
+    plt.savefig('seg_model/outputs/pred_plot_max.png')  # TODO: add unique name
     plt.close()
     print("Visualization saved.")
 
@@ -167,28 +202,22 @@ if __name__ == '__main__':
 
     rgb_anon_path = Path(config.data.root_dir) / config.data.images
     gt_path = Path(config.data.root_dir) / config.data.labels
-    img_path = 'srgan_model/image_super_resolved.png'
+    img_path = 'srgan_model/image_super_resolved.png'  # NOTE: This image is a 128x128 image, but upsampled to 512x512, which is not equal to the original image being resized to 512x512
     gt_label_ids_path = str(gt_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_gt_labelIds.png')
     gt_color_path = str(gt_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_gt_labelColor.png')
+    original_img_path = str(rgb_anon_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_rgb_anon.png')
 
     model_path = 'seg_model/outputs/checkpoints/deeplabv3plus_resnet101_epoch_28.pth'
     model = load_model(model_path, config.model)
 
-    input_tensor, decoded_label_tensor, lbl_colored_img = preprocess(img_path, gt_label_ids_path, gt_color_path)
+    original_image, input_tensor, encoded_label_tensor, lbl_colored_img = preprocess(original_img_path, img_path, gt_label_ids_path, gt_color_path)
 
-    pred, input_gradients, gradients_np = infer(model, input_tensor, decoded_label_tensor)
+    pred, input_gradients, gradients_np = infer(model, input_tensor, encoded_label_tensor)
 
-    visualize_samples(input_tensor, pred, lbl_colored_img)
+    # gradients is a tensor of shape [1, C, 512, 512]
+    gradients_avg_128 = torch.nn.functional.avg_pool2d(input_gradients, kernel_size=4, stride=4)
+    gradient_magnitude_avg_128 = compute_gradient_magnitude(gradients_avg_128, denormalize=True, norm=False)
 
-    # # gradients is a tensor of shape [1, C, 512, 512]
-    # gradients_avg_128 = F.avg_pool2d(input_gradients, kernel_size=4, stride=4)
-
-    # print(f"Gradients 128 shape: {gradients_avg_128.shape}")
-
-    # gradient_magnitude_avg_128 = compute_gradient_magnitude(gradients_avg_128, denormalize=True, norm=False)
-
-    # # Display gradients
-    # plt.imshow(gradient_magnitude_avg_128, cmap='viridis')
-    # plt.title('Gradients Magnitude')
-    # plt.colorbar()
-    # plt.axis('off')
+    visualize_samples(
+        original_image, input_tensor, pred, gradient_magnitude_avg_128, encoded_label_tensor, lbl_colored_img
+    )

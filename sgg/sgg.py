@@ -6,30 +6,42 @@ from seg_model.inference import infer, compute_gradient_magnitude
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def apply_gsg(seg_model: nn.Module, x: torch.Tensor, gt: torch.Tensor, lambda_gsg: float) -> torch.Tensor:
+def apply_gsg(
+    seg_model: nn.Module, mu: torch.Tensor, sigma: torch.Tensor, sr_xt: torch.Tensor, gt: torch.Tensor, _lambda: float
+) -> torch.Tensor:
     # Adjust mu based on global guidance
-    # L(global)[x, y] = L(ce)[g(x), y],
-    # mu_hat(x,k) = mu(x,k) + lambda * cov * gradient(L(global)[x,y])
+    # L(global)[xt, y] = L(ce)[g(xt), y]
+    # mu_hat(xt, t) = mu(xt, t) + lambda * sigma * gradient(L(global)[xt,y])
 
-    _, input_gradients, _ = infer(seg_model, x, gt)
+    _, input_gradients, _ = infer(seg_model, sr_xt, gt)
 
     gradients_avg_128 = F.avg_pool2d(input_gradients, kernel_size=4, stride=4)
     gradient_magnitude_avg_128 = compute_gradient_magnitude(gradients_avg_128, denormalize=True, norm=False)
 
-    # Clip gradients ?
+    mu_hat = mu + _lambda * sigma * gradient_magnitude_avg_128
+    xt = mu_hat + sigma
 
-    return gradient_magnitude_avg_128 * lambda_gsg
+    return xt
 
 
-def apply_lcg(seg_model: nn.Module, xt: torch.Tensor, gt: torch.Tensor, lambda_lcg: float) -> torch.Tensor:
+def apply_lcg(
+    seg_model: nn.Module, mu: torch.Tensor, sigma: torch.Tensor, sr_xt: torch.Tensor, gt: torch.Tensor, _lambda: float
+) -> torch.Tensor:
+    # L(local)[xt, y, c] = L(ce)([g(xt * mc)], y*mc)
+    # mu_hat(xt, t, c) = mu(xt, t) + lambda * sigma * gradient(L(local)[xt, y, c])
+    # xt_c = mu_hat + sigma
+    # xt = sum_c(mc * xt_c)
+
     # Adjust mu based on local guidance
-    gradients_sum = torch.zeros_like(xt)
+    xt_c_list = []
+    mc_list = []
 
     for c in range(19):  # 19 classes
         # Generate class-specific mask
         mc = (gt == c).long().unsqueeze(1).to(device)  # [1,1,512,512]
+        mc_list.append(mc)
 
-        xt_masked = xt * mc  # [1,3,512,512]
+        xt_masked = sr_xt * mc  # [1,3,512,512]
         gt_masked = gt * mc.squeeze(0)  # [1,512,512]
 
         _, input_gradients, _ = infer(seg_model, xt_masked, gt_masked)
@@ -37,9 +49,12 @@ def apply_lcg(seg_model: nn.Module, xt: torch.Tensor, gt: torch.Tensor, lambda_l
         gradients_avg_128 = F.avg_pool2d(input_gradients, kernel_size=4, stride=4)
         gradient_magnitude_avg_128 = compute_gradient_magnitude(gradients_avg_128, denormalize=True, norm=False)
 
-        # mask gradients
-        gradient_magnitude_avg_128 = gradient_magnitude_avg_128 * mc.squeeze(0).cpu().numpy()
+        mu_hat_c = mu + _lambda * sigma * gradient_magnitude_avg_128
+        xt_c = mu_hat_c + sigma
 
-        gradients_sum += gradient_magnitude_avg_128
+        xt_c_list.append(xt_c)
 
-    return gradients_sum * lambda_lcg
+    # Sum all class-specific xt_c
+    xt = torch.sum(torch.stack(xt_c_list) * torch.stack(mc_list), dim=0)
+
+    return xt
