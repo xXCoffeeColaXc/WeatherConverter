@@ -1,9 +1,9 @@
 import torch
 import os
 from pathlib import Path
-import diffusion_model_v2.sample_ddpm as ddpm
+import diffusion_model.sample_ddpm as ddpm
 from tqdm import tqdm
-from diffusion_model_v2.scheduler.linear_noise_scheduler import LinearNoiseScheduler
+from diffusion_model.scheduler.linear_noise_scheduler import LinearNoiseScheduler
 import seg_model.inference as seg_infer
 import srgan_model.inference as srgan_infer
 from sgg.sgg import apply_gsg, apply_lcg
