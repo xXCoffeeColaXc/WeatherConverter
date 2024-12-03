@@ -62,7 +62,6 @@ def sample_with_sgg(
 
     # --------- FORWARD PROCESS ------------
     # add noise to input image for N steps
-    #t = torch.randint(0, N, (input_tensor.shape[0],)).to(device)
     t_n = torch.full((input_tensor.size(0),), N, dtype=torch.long).to(device)
     print(f"t: {t_n}")
 
