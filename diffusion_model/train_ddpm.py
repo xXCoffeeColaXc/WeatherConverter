@@ -27,6 +27,7 @@ config = load_config('diffusion_model/config/config.yaml')
 #run_id = create_run()
 run_id = 0
 # Setup random seed
+# NOTE: rethink this
 random_seed = config.training.random_seed
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)

@@ -50,7 +50,7 @@ def compute_gradient_magnitude(
         gradient_magnitude = (gradient_magnitude -
                               gradient_magnitude.min()) / (gradient_magnitude.max() - gradient_magnitude.min())
 
-    return torch.from_numpy(gradient_magnitude)
+    return torch.from_numpy(gradient_magnitude).to(device)
 
 
 def preprocess(ori_img_path: str, img_path: str, gt_label_ids_path: str,
@@ -86,19 +86,19 @@ def preprocess(ori_img_path: str, img_path: str, gt_label_ids_path: str,
     input_tensor, lbl_tensor = val_transform(img, label)
     lbl_colored_img = val_color_transform(lable_colored)
     original_image = val_ori_transform(ori_img)
-    #print(type(input_tensor), type(lbl_tensor), type(lbl_colored_img))
+    print(type(input_tensor), type(lbl_tensor), type(lbl_colored_img))
     # Prepare tensors for the model
     input_tensor = input_tensor.unsqueeze(0).to(device)
 
-    #print(f"Unique values in label tensor: {torch.unique(lbl_tensor)}")
+    print(f"Unique values in label tensor: {torch.unique(lbl_tensor)}")
 
     encoded_label = ACDCDataset.encode_target(lbl_tensor)
     encoded_label_tensor = torch.from_numpy(np.array(encoded_label)).unsqueeze(0).long().to(device)
-    #print(f"Unique values in label tensor: {torch.unique(encoded_label_tensor)}")
+    print(f"Unique values in label tensor: {torch.unique(encoded_label_tensor)}")
 
-    # print(f"Input Tensor Shape: {input_tensor.shape}")
-    #print(f"Label Tensor Shape: {encoded_label_tensor.shape}")
-    # print(f"Label Image Shape: {lbl_colored_img.size}")
+    print(f"Input Tensor Shape: {input_tensor.shape}")
+    print(f"Label Tensor Shape: {encoded_label_tensor.shape}")
+    print(f"Label Image Shape: {lbl_colored_img.size}")
 
     return original_image, input_tensor, encoded_label_tensor, lbl_colored_img
 
@@ -117,15 +117,15 @@ def infer(model: torch.nn.Module, input_tensor: torch.Tensor,
     # Enable gradient tracking on the input tensor
     input_tensor.requires_grad = True
 
-    print(f"Input Tensor requires gradient: {input_tensor.requires_grad}")
-    print(f"Input tensor gradient: {input_tensor.grad}")
+    #print(f"Input Tensor requires gradient: {input_tensor.requires_grad}")
+    #print(f"Input tensor gradient: {input_tensor.grad}")
 
     # Perform inference
     output: torch.Tensor = model(input_tensor)  # Output shape: [1, num_classes, 512, 512]
-    print(f"Output tensor shape: {output.shape}")
+    #print(f"Output tensor shape: {output.shape}")
     pred = output.argmax(dim=1).squeeze(0).cpu().numpy()  # Shape: [512, 512]
 
-    print(f"Predicted tensor shape: {pred.shape}")
+    #print(f"Predicted tensor shape: {pred.shape}")
 
     loss = criterion(output, encoded_label_tensor.squeeze(1))  # Shape [1, 512, 512]
 
@@ -157,6 +157,8 @@ def visualize_samples(
     colorized_preds = Image.fromarray(colorized_preds)
 
     encoded_label_tensor = encoded_label_tensor.squeeze(0).cpu().numpy()
+
+    gradient_magnitude_avg_128 = gradient_magnitude_avg_128.cpu().numpy()
 
     # Plotting the input image, predictions, and ground truth
     fig, axes = plt.subplots(1, 6, figsize=(18, 6))
@@ -207,7 +209,7 @@ if __name__ == '__main__':
     gt_color_path = str(gt_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_gt_labelColor.png')
     original_img_path = str(rgb_anon_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_rgb_anon.png')
 
-    model_path = 'seg_model/outputs/checkpoints/deeplabv3plus_resnet101_epoch_28.pth'
+    model_path = 'seg_model/outputs/checkpoints/deeplabv3plus_resnet101_epoch_40.pth'
     model = load_model(model_path, config.model)
 
     original_image, input_tensor, encoded_label_tensor, lbl_colored_img = preprocess(original_img_path, img_path, gt_label_ids_path, gt_color_path)

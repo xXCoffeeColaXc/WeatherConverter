@@ -39,8 +39,8 @@ training:
   sample_interval: 1000000000
   resume_training: False
   resume_checkpoint: ''
-  sample_size: 2
-  num_grid_rows : 1
+  sample_size: 8
+  num_grid_rows : 2
 
 
 

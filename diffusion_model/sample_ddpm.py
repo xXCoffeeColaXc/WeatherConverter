@@ -5,7 +5,7 @@ import yaml
 import os
 from torchvision.utils import make_grid
 from tqdm import tqdm
-
+from datetime import datetime
 from diffusion_model.models.unet_base import Unet
 from diffusion_model.scheduler.linear_noise_scheduler import LinearNoiseScheduler
 from diffusion_model.config.models import TrainingConfig, ModelConfig, DiffusionConfig, FolderConfig, Config
@@ -41,15 +41,15 @@ def sample(
         # Use scheduler to get x0 and xt-1
         mean, sigma, x0 = scheduler.sample_prev_timestep(xt, noise_pred, torch.as_tensor(i).to(device))
 
-        xt = mean + sigma
+        xt = mean + sigma if i != 0 else mean
 
     # Save x0
-    ims = torch.clamp(x0, -1., 1.).detach().cpu()
+    ims = torch.clamp(xt, -1., 1.).detach().cpu()
     ims = (ims + 1) / 2
     grid = make_grid(ims, nrow=train_config.num_grid_rows)
     img = torchvision.transforms.ToPILImage()(grid)
     #img = torchvision.transforms.ToPILImage()(ims[0])
-    img.save(os.path.join(save_path, 'x9.png'))
+    img.save(os.path.join(save_path, f'x_410{datetime.now().hour}{datetime.now().minute}{datetime.now().second}.png'))
     img.close()
 
 
@@ -71,7 +71,7 @@ def load_scheduler(diffusion_config: DiffusionConfig) -> LinearNoiseScheduler:
 
 
 def infer(config: Config):
-    epoch = 20
+    epoch = 410
     # Load model with checkpoint
     checkpoint_path = os.path.join(config.folders.checkpoints, f'{epoch}-checkpoint.ckpt')
     model = load_model(checkpoint_path, config.model)
@@ -88,9 +88,6 @@ def infer(config: Config):
 
 
 if __name__ == '__main__':
-    epoch = 20
-    config = load_config('diffusion_model_v2/config/config.yaml')
-    checkpoint_path = os.path.join(config.folders.checkpoints, f'{epoch}-checkpoint.ckpt')
-    model = load_model(checkpoint_path, config.model)
-    scheduler = load_scheduler(config.diffusion)
-    sample(model, scheduler, config.training, config.model, config.diffusion, config.folders.samples)
+    config = load_config('diffusion_model/config/config.yaml')
+
+    infer(config)

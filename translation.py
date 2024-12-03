@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import os
 from pathlib import Path
 import diffusion_model.sample_ddpm as ddpm
@@ -26,7 +27,7 @@ def debug_tensor(tensor: torch.Tensor, path: str, title: str = None):
         tensor = tensor.squeeze(0)  # [3, 128, 128]
         tensor = torch.clamp(tensor, -1., 1.).detach().cpu()
         tensor = (tensor + 1) / 2
-    elif tensor.ndim == 3 and tensor.shape[0] == 1:
+    elif tensor.ndim == 3 and tensor.shape[0] == 1:  # [1, 512, 512]
         tensor = tensor.float()
         print(f"Tensor unique values: {tensor.unique()}")
 
@@ -73,7 +74,7 @@ def sample_with_sgg(
         noise_pred = diff_model(xt, torch.as_tensor(i).unsqueeze(0).to(device))
         #debug_tensor(noise_pred, f'debug/noise_pred_{i}.png', 'noise_pred')
 
-        # Use scheduler to get x0 and xt-1
+        # Use scheduler to get mu and sigma
         mu, sigma, _ = diff_scheduler.sample_prev_timestep(xt, noise_pred, torch.as_tensor(i).to(device))
 
         # Upscale xt to 512x512
@@ -85,8 +86,8 @@ def sample_with_sgg(
         elif i % 2 == 1 and i != 0:
             xt = apply_gsg(seg_model, mu, sigma, sr_xt, gt, LAMBDA)
 
-        if i == 0:
-            xt = mu + sigma
+        # if i == 0:
+        xt = mu + sigma
 
         #debug_tensor(xt, f'debug/xt_{i}.png', 'xt')
 
@@ -127,7 +128,7 @@ if __name__ == '__main__':
     input_transform = transforms.Compose(
         [
             transforms.Resize(diff_config.data.image_size, transforms.InterpolationMode.BILINEAR),
-            transforms.RandomCrop(diff_config.data.image_size),
+            transforms.CenterCrop(diff_config.data.image_size),
             transforms.ToTensor(),
             transforms.Lambda(lambd=lambda x: x * 2.0 - 1.0),  # Normalize to [-1, 1]
         ]
@@ -144,9 +145,8 @@ if __name__ == '__main__':
             gt=encoded_label_tensor_512,
             srgan_model=srgan_model
         )
+        debug_tensor(output_tensor_512, 'debug/output_512.png', 'output_512')
     except Exception as e:
         print(e)
-
-    debug_tensor(output_tensor_512, 'debug/output_512.png', 'output_512')
 
     #visualize_result(output_tensor_512, input_tensor_512, lbl_colored_img_512)
