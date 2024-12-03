@@ -72,7 +72,7 @@ def get_loader(image_dir, selected_attrs, image_size=128, batch_size=16, num_wor
 
 if __name__ == '__main__':
     image_dir = '/media/talmacsi/48a93eb4-f27d-48ec-9f74-64e475c3b6ff/Downloads/data/ACDC/rgb_anon'
-    selected_conditions = ['fog']
+    selected_conditions = ['rain']
     image_size = 128
     batch_size = 16
     num_workers = 0

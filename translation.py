@@ -62,7 +62,7 @@ def sample_with_sgg(
     # add noise to input image for N steps
     t = torch.randint(0, N, (input_tensor.shape[0],)).to(device)
     noise = torch.randn_like(input_tensor).to(device)
-    xt = diff_scheduler.add_noise(input_tensor, noise, t)
+    xt = diff_scheduler.add_noise2(input_tensor, noise, t)
 
     #debug_tensor(xt, f'debug/xt_{N}_noised.png', 'xt_noised')
 
@@ -99,22 +99,30 @@ def sample_with_sgg(
 
 if __name__ == '__main__':
 
-    # ---------- Load Diffusion Model ----------
+    # ----------------------------------------------------------------------------
+    # ------------------------------ Load Diffusion Model ------------------------
+    # ----------------------------------------------------------------------------
     diff_config = ddpm.load_config('diffusion_model/config/config.yaml')
-    diff_checkpoint_path = os.path.join(diff_config.folders.checkpoints, f'20-checkpoint.ckpt')
+    diff_checkpoint_path = os.path.join(diff_config.folders.checkpoints, f'old_model/1000-checkpoint.ckpt')
     diff_model = ddpm.load_model(diff_checkpoint_path, diff_config.model)
     diff_scheduler = ddpm.load_scheduler(diff_config.diffusion)
 
-    # ---------- Load SRGAN Model ----------
+    # ----------------------------------------------------------------------------
+    # ------------------------------ Load SRGAN Model ----------------------------
+    # ----------------------------------------------------------------------------
     srgan_model_path = '/media/talmacsi/48a93eb4-f27d-48ec-9f74-64e475c3b6ff/Downloads/swift_srgan_4x.pth.tar'
     srgan_model = srgan_infer.load_model(srgan_model_path)
 
-    # ---------- Load Segment Model ----------
+    # ----------------------------------------------------------------------------
+    # ------------------------------ Load Segment Model --------------------------
+    # ----------------------------------------------------------------------------
     seg_config = seg_infer.load_config('seg_model/config/config.yaml')
-    seg_model_path = os.path.join(seg_config.folders.checkpoints, 'deeplabv3plus_resnet101_epoch_28.pth')
+    seg_model_path = os.path.join(seg_config.folders.checkpoints, 'augmented/deeplabv3plus_resnet101_epoch_40.pth')
     seg_model = seg_infer.load_model(seg_model_path, seg_config.model)
 
-    # ---------- Load Test Data ----------
+    # ----------------------------------------------------------------------------
+    # ------------------------------ Load Test Data ------------------------------
+    # ----------------------------------------------------------------------------
     rgb_anon_path = Path(seg_config.data.root_dir) / seg_config.data.images
     gt_path = Path(seg_config.data.root_dir) / seg_config.data.labels
     gt_label_ids_path = str(gt_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_gt_labelIds.png')  # (0-32 values)
@@ -122,7 +130,9 @@ if __name__ == '__main__':
     input_image_path = str(rgb_anon_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_rgb_anon.png')
     input_image = Image.open(input_image_path).convert("RGB")
 
-    # ---------- Preprocess Test Data ----------
+    # ----------------------------------------------------------------------------
+    # ------------------------------ Preprocess Test Data ------------------------
+    # ----------------------------------------------------------------------------
     _, input_tensor_512, encoded_label_tensor_512, lbl_colored_img_512 = seg_infer.preprocess(ori_img_path=input_image_path, img_path=input_image_path, gt_label_ids_path=gt_label_ids_path, gt_color_path=gt_color_path)
 
     input_transform = transforms.Compose(
@@ -135,7 +145,9 @@ if __name__ == '__main__':
     )
     input_tensor_128: torch.Tensor = input_transform(input_image).unsqueeze(0).to(device)  # [1, 3, 128, 128]
 
-    # ---------- Run translation ----------
+    # ----------------------------------------------------------------------------
+    # ------------------------------ Run translation -----------------------------
+    # ----------------------------------------------------------------------------
     try:
         output_tensor_512 = sample_with_sgg(
             input_tensor=input_tensor_128,

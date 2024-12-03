@@ -27,6 +27,13 @@ class LinearNoiseScheduler:
         self.one_minus_cum_prod = self.one_minus_cum_prod.to(device)
         self.sqrt_one_minus_alpha_cum_prod = self.sqrt_one_minus_alpha_cum_prod.to(device)
 
+    def add_noise2(self, original, noise, t):
+        sqrt_alpha_cum_prod = self.sqrt_alpha_cum_prod.to(device)[t].reshape(-1, 1, 1, 1)
+        sqrt_one_minus_alpha_cum_prod = self.sqrt_one_minus_alpha_cum_prod.to(device)[t].reshape(-1, 1, 1, 1)
+
+        noise_image = sqrt_alpha_cum_prod * original + sqrt_one_minus_alpha_cum_prod * noise
+        return noise_image
+
     def add_noise(self, original, noise, t):
         r"""
         Forward method for diffusion
