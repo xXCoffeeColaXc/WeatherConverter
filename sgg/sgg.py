@@ -25,7 +25,13 @@ def apply_gsg(
 
 
 def apply_lcg(
-    seg_model: nn.Module, mu: torch.Tensor, sigma: torch.Tensor, sr_xt: torch.Tensor, gt: torch.Tensor, _lambda: float
+    seg_model: nn.Module,
+    mu: torch.Tensor,
+    sigma: torch.Tensor,
+    sr_xt: torch.Tensor,
+    gt: torch.Tensor,
+    gt_128: torch.Tensor,
+    _lambda: float
 ) -> torch.Tensor:
     # L(local)[xt, y, c] = L(ce)([g(xt * mc)], y*mc)
     # mu_hat(xt, t, c) = mu(xt, t) + lambda * sigma * gradient(L(local)[xt, y, c])
@@ -39,7 +45,8 @@ def apply_lcg(
     for c in range(19):  # 19 classes
         # Generate class-specific mask
         mc = (gt == c).long().unsqueeze(1).to(device)  # [1,1,512,512]
-        mc_list.append(mc)
+        mc_128 = F.interpolate(mc.float(), size=(128, 128), mode='nearest').long()
+        mc_list.append(mc_128)
 
         xt_masked = sr_xt * mc  # [1,3,512,512]
         gt_masked = gt * mc.squeeze(0)  # [1,512,512]

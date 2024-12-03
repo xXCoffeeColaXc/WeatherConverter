@@ -34,7 +34,7 @@ def load_model(model_path: Path, model_config: ModelConfig) -> torch.nn.Module:
 
 
 def compute_gradient_magnitude(
-    input_gradients: torch.Tensor, denormalize: bool = True, norm: bool = False
+    input_gradients: torch.Tensor, denormalize: bool = True, norm: bool = False, verbose: bool = False
 ) -> torch.Tensor:
     gradients_np = input_gradients.squeeze(0).cpu().numpy()  # Shape: [3, 512, 512]
 
@@ -42,8 +42,9 @@ def compute_gradient_magnitude(
         gradients_np = gradients_np * np.array([0.229, 0.224, 0.225])[:, None, None]
     gradient_magnitude = np.sqrt(np.sum(gradients_np**2, axis=0))  # Shape: [512, 512]
 
-    print("Gradient min:", gradient_magnitude.min())
-    print("Gradient max:", gradient_magnitude.max())
+    if verbose:
+        print("Gradient min:", gradient_magnitude.min())
+        print("Gradient max:", gradient_magnitude.max())
 
     if norm:
         # Normalize gradient magnitude to [0,1] for better visualization
@@ -59,12 +60,7 @@ def preprocess(ori_img_path: str,
                gt_color_path: str,
                verbose=False) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, Image.Image]:
     '''
-    Preprocess the input image and the ground truth label for inference.
-    1. Load the image and label
-    2. Apply transformations
-    3. Prepare tensors for the model
-    4. Encode the label to [0, num_classes-1]
-    5. Return the original image, input tensor, encoded label tensor, and the colorized ground truth image
+    Return the original image, input tensor, encoded label tensor (512), encoded label tensor (128) , and the colorized ground truth image
     '''
     # Load your image
     img = Image.open(img_path).convert("RGB")
@@ -81,6 +77,10 @@ def preprocess(ori_img_path: str,
         ]
     )
 
+    val_label_mask_transform = T.Compose(
+        [T.Resize(size=(1080 // 8, 1920 // 8), interpolation=Image.NEAREST), T.CenterCrop(size=(128, 128))]
+    )
+
     val_color_transform = T.Compose(
         [
             T.Resize(size=(1080 // 2, 1920 // 2), interpolation=Image.BILINEAR),
@@ -95,6 +95,7 @@ def preprocess(ori_img_path: str,
 
     # Apply transformations
     input_tensor, lbl_tensor = val_transform(img, label)  # input image (512) and label (512)
+    lbl_tensor_128 = val_label_mask_transform(label)  # label mask (128)
     lbl_colored_img = val_color_transform(lable_colored)  # colorized gt image (512)
     original_image = val_ori_transform(ori_img)  # original image (512)
 
@@ -104,6 +105,9 @@ def preprocess(ori_img_path: str,
     encoded_label = ACDCDataset.encode_target(lbl_tensor)  # Encode the label to [0, num_classes-1]
     encoded_label_tensor = torch.from_numpy(np.array(encoded_label)).unsqueeze(0).long().to(device)
 
+    encoded_label_128 = ACDCDataset.encode_target(lbl_tensor_128)  # Encode the label to [0, num_classes-1]
+    encoded_label_tensor_128 = torch.from_numpy(np.array(encoded_label_128)).unsqueeze(0).long().to(device)
+
     if verbose:
         print("types: ", type(input_tensor), type(lbl_tensor), type(lbl_colored_img))
         print(f"Unique values in label tensor: {torch.unique(lbl_tensor)}")
@@ -112,13 +116,16 @@ def preprocess(ori_img_path: str,
         print(f"Label Tensor Shape: {encoded_label_tensor.shape}")
         print(f"Label Image Shape: {lbl_colored_img.size}")
 
-    return original_image, input_tensor, encoded_label_tensor, lbl_colored_img
+    return original_image, input_tensor, encoded_label_tensor, encoded_label_tensor_128, lbl_colored_img
 
 
 def infer(model: torch.nn.Module,
           input_tensor: torch.Tensor,
           encoded_label_tensor: torch.Tensor,
           verbose=False) -> tuple[np.ndarray, torch.Tensor, np.ndarray]:
+    '''
+    Returns the predicted segmentation, input gradients, and gradients as numpy array.
+    '''
 
     # NOTE: The batch dimension should be 1 !!!
     criterion = torch.nn.CrossEntropyLoss(ignore_index=255)
