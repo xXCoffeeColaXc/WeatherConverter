@@ -64,7 +64,7 @@ def save_images(lr_image: Image.Image, sr_image: Image.Image):
 if __name__ == '__main__':
     # === Configuration ===
     model_path = '/media/talmacsi/48a93eb4-f27d-48ec-9f74-64e475c3b6ff/Downloads/swift_srgan_4x.pth.tar'  # Path to your pre-trained Generator model
-    input_image_path = '/media/talmacsi/48a93eb4-f27d-48ec-9f74-64e475c3b6ff/Downloads/data/ACDC/rgb_anon/fog/val/GOPR0476/GOPR0476_frame_000854_rgb_anon.png'  # Path to the input low-resolution image
+    input_image_path = 'debug/xt_10_noised.png'  # Path to the input low-resolution image
 
     # Load the pre-trained Generator model
     netG = load_model(model_path)

@@ -147,7 +147,13 @@ def infer(model: torch.nn.Module,
 
     loss.backward()
 
-    input_gradients = input_tensor.grad  # Shape: [1, 3, 512, 512]
+    input_gradients = input_tensor.grad.detach()  # Shape: [1, 3, 512, 512]
+
+    input_tensor.grad = None
+    # Clean up variables to free memory
+    del output, loss
+    torch.cuda.empty_cache()
+
     gradients_np = input_gradients.detach().cpu().squeeze(0).numpy()
 
     if verbose:

@@ -25,9 +25,13 @@ def debug_tensor(tensor: torch.Tensor, path: str, title: str = None):
     print(f"Tensor device: {tensor.device}")
 
     if tensor.ndim == 4 and tensor.shape[1] == 3:
-        tensor = tensor.squeeze(0)  # [3, 128, 128]
-        tensor = torch.clamp(tensor, -1., 1.).detach().cpu()
-        tensor = (tensor + 1) / 2
+        tensor = tensor.squeeze(0)
+        mean = [0.4865, 0.4998, 0.4323]
+        std = [0.2326, 0.2276, 0.2659]
+        mean = torch.tensor(mean, device=tensor.device).view(1, -1, 1)
+        std = torch.tensor(std, device=tensor.device).view(1, -1, 1)
+        images = tensor * std + mean
+        images = (images * 255).clamp(0, 255).type(torch.uint8).detach().cpu()
     elif tensor.ndim == 3 and tensor.shape[0] == 1:  # [1, 512, 512]
         tensor = tensor.float()
         print(f"Tensor unique values: {tensor.unique()}")
@@ -38,6 +42,14 @@ def debug_tensor(tensor: torch.Tensor, path: str, title: str = None):
 
     print(f"Image saved to {path}")
     print('-' * 50)
+
+
+def postprocess(xt, mean=[0.4865, 0.4998, 0.4323], std=[0.2326, 0.2276, 0.2659]):
+    mean = torch.tensor(mean, device=xt.device).view(1, -1, 1, 1)
+    std = torch.tensor(std, device=xt.device).view(1, -1, 1, 1)
+    images = xt * std + mean
+    images = (images * 255).clamp(0, 255).type(torch.uint8).detach().cpu()
+    return images
 
 
 def visualize_result(output_tensor: torch.Tensor, input_tensor: torch.Tensor, lbl_colored_img: torch.Tensor):
@@ -55,7 +67,7 @@ def sample_with_sgg(
 ) -> torch.Tensor:
 
     LAMBDA = 60.0
-    N = 100
+    N = 200
 
     #debug_tensor(input_tensor, 'debug/input.png', 'input_tensor')
     #debug_tensor(gt, 'debug/gt.png', 'gt')
@@ -68,7 +80,7 @@ def sample_with_sgg(
     noise = torch.randn_like(input_tensor).to(device)
     xt = diff_scheduler.add_noise2(input_tensor, noise, t_n)
 
-    debug_tensor(xt, f'debug/xt_{N}_noised.png', 'xt_noised')
+    #debug_tensor(xt, f'debug/xt_{N}_noised.png', 'xt_noised')
 
     # --------- REVERSE PROCESS ------------
     for i in tqdm(reversed(range(N))):
@@ -77,30 +89,48 @@ def sample_with_sgg(
         xt = xt.float()
 
         # Get prediction of noise
-        noise_pred = diff_model(xt, diff_scheduler.one_minus_cum_prod[t].view(-1, 1, 1, 1))
+        with torch.no_grad():
+            noise_pred = diff_model(xt, diff_scheduler.one_minus_cum_prod[t].view(-1, 1, 1, 1))
         #debug_tensor(noise_pred, f'debug/noise_pred_{i}.png', 'noise_pred')
 
         # Use scheduler to get mu and sigma
         mu, sigma, _ = diff_scheduler.sample_prev_timestep2(xt, noise_pred, t)
 
         # Upscale xt to 512x512
-        sr_xt = srgan_infer.inference(srgan_model, xt)
+        with torch.no_grad():
+            sr_xt = mu + sigma
+            sr_xt = postprocess(sr_xt)  # to image space
+            sr_xt = Image.fromarray(sr_xt.squeeze(0).numpy().transpose(1, 2, 0))
+            sr_xt = transforms.ToTensor()(sr_xt).unsqueeze(0).to(device)
+            sr_xt = srgan_infer.inference(srgan_model, sr_xt)
+            pil_image = transforms.ToPILImage()(sr_xt.squeeze(0))
+            pil_image.save(f'debug/sr_xt_{i}.png')
 
-        # Apply SGG
+        #Apply SGG
         if i % 2 == 0 and i != 0:
             xt = apply_lcg(seg_model, mu, sigma, sr_xt, gt, gt_128, LAMBDA)
         elif i % 2 == 1 and i != 0:
             xt = apply_gsg(seg_model, mu, sigma, sr_xt, gt, LAMBDA)
 
+        #xt = mu + sigma if i != 0 else mu
+
         if i == 0:
             xt = mu
 
-        #debug_tensor(xt, f'debug/xt_{i}.png', 'xt')
+        xt = xt.detach()
 
     # Upscale x0 to 512x512
-    sr_x0 = srgan_infer.inference(srgan_model, xt)
 
-    return sr_x0
+    xt_processed = postprocess(xt)  # to image space
+    asd = Image.fromarray(xt_processed.squeeze(0).numpy().transpose(1, 2, 0))
+    asd = transforms.ToTensor()(asd).unsqueeze(0).to(device)
+    #xt_processed = torch.tensor(xt_processed, dtype=torch.float32).to(device)
+    sr_x0 = srgan_infer.inference(srgan_model, asd)
+
+    pil_image = transforms.ToPILImage()(sr_x0.squeeze(0))
+    pil_image.save('debug/xt.png')
+
+    return xt
 
 
 if __name__ == '__main__':
@@ -134,7 +164,12 @@ if __name__ == '__main__':
     gt_label_ids_path = str(gt_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_gt_labelIds.png')  # (0-32 values)
     gt_color_path = str(gt_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_gt_labelColor.png')  # (RGB values)
     input_image_path = str(rgb_anon_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_rgb_anon.png')
+    print(f"Input image path: {input_image_path}")
+    print(f"GT label ids path: {gt_label_ids_path}")
+    print(f"GT color path: {gt_color_path}")
     input_image = Image.open(input_image_path).convert("RGB")
+
+    pass
 
     # ----------------------------------------------------------------------------
     # ------------------------------ Preprocess Test Data ------------------------
@@ -146,7 +181,8 @@ if __name__ == '__main__':
             transforms.Resize(diff_config.data.image_size, transforms.InterpolationMode.BILINEAR),
             transforms.CenterCrop(diff_config.data.image_size),
             transforms.ToTensor(),
-            transforms.Lambda(lambd=lambda x: x * 2.0 - 1.0),  # Normalize to [-1, 1]
+            transforms.Normalize(mean=[0.4865, 0.4998, 0.4323], std=[0.2326, 0.2276, 0.2659])
+            #transforms.Lambda(lambd=lambda x: x * 2.0 - 1.0),  # Normalize to [-1, 1]
         ]
     )
     input_tensor_128: torch.Tensor = input_transform(input_image).unsqueeze(0).to(device)  # [1, 3, 128, 128]
@@ -164,6 +200,6 @@ if __name__ == '__main__':
         gt_128=encoded_label_tensor_128,
         srgan_model=srgan_model
     )
-    debug_tensor(output_tensor_512, 'debug/output_512.png', 'output_512')
+    #debug_tensor(output_tensor_512, 'debug/output_512.png', 'output_512')
 
     #visualize_result(output_tensor_512, input_tensor_512, lbl_colored_img_512)
