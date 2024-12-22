@@ -2,7 +2,8 @@ import torch
 from PIL import Image
 import torchvision.transforms as T
 import numpy as np
-import utils
+from seg_model.utils.scheduler import PolyLR
+from seg_model.utils.loss import FocalLoss
 from torch.utils.data import DataLoader
 import random
 import yaml
@@ -16,7 +17,7 @@ import matplotlib.pyplot as plt
 import seg_model.network as network
 from seg_model.config.models import Config
 from seg_model.utils.ext_transforms import *
-from seg_model.utils.utils import create_run, denormalize, print_class_iou
+from seg_model.utils.utils import create_run, denormalize, print_class_iou, set_bn_momentum
 from seg_model.metrics.stream_metrics import StreamSegMetrics
 from seg_model.datasets.acdc import ACDCDataset
 
@@ -65,16 +66,16 @@ def load_model(weight_path: str) -> torch.nn.Module:
     model.load_state_dict(torch.load(weight_path)['model_state'])
     model.to(device)
 
-    utils.set_bn_momentum(model.backbone, momentum=config.model.bn_momentum)
+    set_bn_momentum(model.backbone, momentum=config.model.bn_momentum)
 
     return model
 
 
-def reload_modules(weight_path: str, optimizer: torch.optim.Optimizer, scheduler: utils.PolyLR) -> torch.nn.Module:
+def reload_modules(weight_path: str, optimizer: torch.optim.Optimizer, scheduler: PolyLR) -> torch.nn.Module:
     checkpoint = torch.load(weight_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.to(device)
-    utils.set_bn_momentum(model.backbone, momentum=config.model.bn_momentum)
+    set_bn_momentum(model.backbone, momentum=config.model.bn_momentum)
 
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
@@ -85,11 +86,7 @@ def reload_modules(weight_path: str, optimizer: torch.optim.Optimizer, scheduler
 
 
 def save_checkpoint(
-    model: torch.nn.Module,
-    optimizer: torch.optim.Optimizer,
-    scheduler: utils.PolyLR,
-    epoch: int,
-    avg_epoch_loss: float
+    model: torch.nn.Module, optimizer: torch.optim.Optimizer, scheduler: PolyLR, epoch: int, avg_epoch_loss: float
 ):
     checkpoint = {
         'epoch': epoch,
@@ -121,7 +118,7 @@ def get_dataloader(
         raise ValueError("Dataset is empty. Please check the dataset path.")
 
     # Create the DataLoader
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=True)
 
     return loader
 
@@ -346,7 +343,7 @@ if __name__ == '__main__':
         raise ValueError("Optimizer not supported")
 
     if config.training.scheduler.type == 'PolyLR':
-        scheduler = utils.PolyLR(optimizer, total_itrs, **config.training.scheduler.params)
+        scheduler = PolyLR(optimizer, total_itrs, **config.training.scheduler.params)
     elif config.training.scheduler.type == 'StepLR':
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, **config.training.scheduler.params)
     else:
@@ -356,7 +353,7 @@ if __name__ == '__main__':
     if config.training.loss_function.type == 'CrossEntropyLoss':
         criterion = torch.nn.CrossEntropyLoss(**config.training.loss_function.params)
     elif config.training.loss_function.type == 'FocalLoss':
-        criterion = utils.FocalLoss(**config.training.loss_function.params)
+        criterion = FocalLoss(**config.training.loss_function.params)
 
     if config.training.resume_training and config.training.resume_checkpoint is not None:
         model, optimizer, scheduler, start_epoch = reload_modules(config.training.resume_checkpoint, optimizer, scheduler)

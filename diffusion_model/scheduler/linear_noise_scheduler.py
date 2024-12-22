@@ -102,8 +102,6 @@ class LinearNoiseScheduler:
         if t == 0:
             return mean, None, None
         else:
-            # NOTE: try
-            #variance = self.betas[t]
             variance = (1 - self.alpha_cum_prod.to(xt.device)[t - 1]) / (1.0 - self.alpha_cum_prod.to(xt.device)[t])
             variance = variance * self.betas.to(xt.device)[t]
             sigma = variance**0.5

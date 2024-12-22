@@ -49,7 +49,7 @@ def sample(
     grid = make_grid(ims, nrow=train_config.num_grid_rows)
     img = torchvision.transforms.ToPILImage()(grid)
     #img = torchvision.transforms.ToPILImage()(ims[0])
-    img.save(os.path.join(save_path, f'x_410{datetime.now().hour}{datetime.now().minute}{datetime.now().second}.png'))
+    img.save(os.path.join(save_path, f'410/{datetime.now().hour}{datetime.now().minute}{datetime.now().second}.png'))
     img.close()
 
 

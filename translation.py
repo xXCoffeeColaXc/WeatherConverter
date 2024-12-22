@@ -10,38 +10,24 @@ import srgan_model.inference as srgan_infer
 from sgg.sgg import apply_gsg, apply_lcg
 from torchvision import transforms
 from PIL import Image
+from torchvision.utils import save_image
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+MEAN, STD = [0.4865, 0.4998, 0.4323], [0.2326, 0.2276, 0.2659]
 
-def debug_tensor(tensor: torch.Tensor, path: str, title: str = None):
-    if title:
-        print(title)
 
-    print(f"Tensor dtype: {tensor.dtype}")
-    print(f"Tensor shape: {tensor.shape}")
-    print(f"Tensor min: {tensor.min().item()}")
-    print(f"Tensor max: {tensor.max().item()}")
-    print(f"Tensor device: {tensor.device}")
+# For the diffusion model
+def normalize_(tensor):
+    mean = torch.tensor(MEAN, device=tensor.device).view(1, -1, 1, 1)
+    std = torch.tensor(STD, device=tensor.device).view(1, -1, 1, 1)
+    return (tensor - mean) / std
 
-    if tensor.ndim == 4 and tensor.shape[1] == 3:
-        tensor = tensor.squeeze(0)
-        mean = [0.4865, 0.4998, 0.4323]
-        std = [0.2326, 0.2276, 0.2659]
-        mean = torch.tensor(mean, device=tensor.device).view(1, -1, 1)
-        std = torch.tensor(std, device=tensor.device).view(1, -1, 1)
-        images = tensor * std + mean
-        images = (images * 255).clamp(0, 255).type(torch.uint8).detach().cpu()
-    elif tensor.ndim == 3 and tensor.shape[0] == 1:  # [1, 512, 512]
-        tensor = tensor.float()
-        print(f"Tensor unique values: {tensor.unique()}")
 
-    # Convert the tensor to a PIL Image
-    pil_image = transforms.ToPILImage()(tensor)
-    pil_image.save(path)
-
-    print(f"Image saved to {path}")
-    print('-' * 50)
+def denormalize_(tensor):
+    mean = torch.tensor(MEAN, device=tensor.device).view(1, -1, 1, 1)
+    std = torch.tensor(STD, device=tensor.device).view(1, -1, 1, 1)
+    return tensor * std + mean
 
 
 def postprocess(xt, mean=[0.4865, 0.4998, 0.4323], std=[0.2326, 0.2276, 0.2659]):
@@ -64,71 +50,57 @@ def sample_with_sgg(
     gt: torch.Tensor,  # [1, 512, 512] encoded label (0-18 values)
     gt_128: torch.Tensor,  # [1, 128, 128] encoded label (0-18 values)
     srgan_model: torch.nn.Module,
+    mode: str = 'gsg',  # 'gsg' or 'lcg' or 'sgg'
+    LAMBDA: float = 60.0,
+    N: int = 400
 ) -> torch.Tensor:
 
-    LAMBDA = 60.0
-    N = 200
-
-    #debug_tensor(input_tensor, 'debug/input.png', 'input_tensor')
-    #debug_tensor(gt, 'debug/gt.png', 'gt')
+    print('Starting translation with mode:', mode)
 
     # --------- FORWARD PROCESS ------------
     # add noise to input image for N steps
     t_n = torch.full((input_tensor.size(0),), N, dtype=torch.long).to(device)
-    print(f"t: {t_n}")
 
     noise = torch.randn_like(input_tensor).to(device)
     xt = diff_scheduler.add_noise2(input_tensor, noise, t_n)
 
-    #debug_tensor(xt, f'debug/xt_{N}_noised.png', 'xt_noised')
-
     # --------- REVERSE PROCESS ------------
     for i in tqdm(reversed(range(N))):
-        #print(f"Step {i}")
         t = torch.full((xt.size(0),), i, dtype=torch.long).to(device)
         xt = xt.float()
 
         # Get prediction of noise
         with torch.no_grad():
             noise_pred = diff_model(xt, diff_scheduler.one_minus_cum_prod[t].view(-1, 1, 1, 1))
-        #debug_tensor(noise_pred, f'debug/noise_pred_{i}.png', 'noise_pred')
 
         # Use scheduler to get mu and sigma
         mu, sigma, _ = diff_scheduler.sample_prev_timestep2(xt, noise_pred, t)
 
-        # Upscale xt to 512x512
-        with torch.no_grad():
-            sr_xt = mu + sigma
-            sr_xt = postprocess(sr_xt)  # to image space
-            sr_xt = Image.fromarray(sr_xt.squeeze(0).numpy().transpose(1, 2, 0))
-            sr_xt = transforms.ToTensor()(sr_xt).unsqueeze(0).to(device)
-            sr_xt = srgan_infer.inference(srgan_model, sr_xt)
-            pil_image = transforms.ToPILImage()(sr_xt.squeeze(0))
-            pil_image.save(f'debug/sr_xt_{i}.png')
+        if i != 0:
+            xt = mu + sigma
+            xt_denorm = denormalize_(xt).clamp(0, 1)  # denormalize to [0, 1]
+            sr_xt = srgan_infer.inference(srgan_model, xt_denorm)  # Upscale xt to 512x512
+            sr_xt_norm = normalize_(sr_xt)
 
-        #Apply SGG
-        if i % 2 == 0 and i != 0:
-            xt = apply_lcg(seg_model, mu, sigma, sr_xt, gt, gt_128, LAMBDA)
-        elif i % 2 == 1 and i != 0:
-            xt = apply_gsg(seg_model, mu, sigma, sr_xt, gt, LAMBDA)
-
-        #xt = mu + sigma if i != 0 else mu
-
-        if i == 0:
+            if mode == 'gsg':
+                xt = apply_gsg(seg_model, mu, sigma, sr_xt_norm, gt, LAMBDA, True, i)
+            elif mode == 'lcg':
+                xt = apply_lcg(seg_model, mu, sigma, sr_xt_norm, gt, gt_128, LAMBDA, False)
+            elif mode == 'sgg':
+                if i % 2 == 0:
+                    xt = apply_lcg(seg_model, mu, sigma, sr_xt_norm, gt, gt_128, LAMBDA)
+                elif i % 2 == 1:
+                    xt = apply_gsg(seg_model, mu, sigma, sr_xt_norm, gt, LAMBDA)
+        else:
             xt = mu
 
         xt = xt.detach()
 
     # Upscale x0 to 512x512
+    xt_denorm = denormalize_(xt).clamp(0, 1)
+    final_output = srgan_infer.inference(srgan_model, xt_denorm)
 
-    xt_processed = postprocess(xt)  # to image space
-    asd = Image.fromarray(xt_processed.squeeze(0).numpy().transpose(1, 2, 0))
-    asd = transforms.ToTensor()(asd).unsqueeze(0).to(device)
-    #xt_processed = torch.tensor(xt_processed, dtype=torch.float32).to(device)
-    sr_x0 = srgan_infer.inference(srgan_model, asd)
-
-    pil_image = transforms.ToPILImage()(sr_x0.squeeze(0))
-    pil_image.save('debug/xt.png')
+    save_image(final_output, f'debug/final_output_{N}_{LAMBDA}_{mode}.png')
 
     return xt
 
@@ -153,7 +125,7 @@ if __name__ == '__main__':
     # ------------------------------ Load Segment Model --------------------------
     # ----------------------------------------------------------------------------
     seg_config = seg_infer.load_config('seg_model/config/config.yaml')
-    seg_model_path = os.path.join(seg_config.folders.checkpoints, 'augmented/deeplabv3plus_resnet101_epoch_40.pth')
+    seg_model_path = os.path.join(seg_config.folders.checkpoints, 'augmented/deeplabv3plus_resnet101_epoch_80.pth')
     seg_model = seg_infer.load_model(seg_model_path, seg_config.model)
 
     # ----------------------------------------------------------------------------
@@ -163,13 +135,8 @@ if __name__ == '__main__':
     gt_path = Path(seg_config.data.root_dir) / seg_config.data.labels
     gt_label_ids_path = str(gt_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_gt_labelIds.png')  # (0-32 values)
     gt_color_path = str(gt_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_gt_labelColor.png')  # (RGB values)
-    input_image_path = str(rgb_anon_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_rgb_anon.png')
-    print(f"Input image path: {input_image_path}")
-    print(f"GT label ids path: {gt_label_ids_path}")
-    print(f"GT color path: {gt_color_path}")
+    input_image_path = 'srgan_model/image_super_resolved.png'
     input_image = Image.open(input_image_path).convert("RGB")
-
-    pass
 
     # ----------------------------------------------------------------------------
     # ------------------------------ Preprocess Test Data ------------------------
@@ -178,10 +145,10 @@ if __name__ == '__main__':
 
     input_transform = transforms.Compose(
         [
-            transforms.Resize(diff_config.data.image_size, transforms.InterpolationMode.BILINEAR),
+            transforms.Resize((1080 // 8, 1920 // 8)),
             transforms.CenterCrop(diff_config.data.image_size),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.4865, 0.4998, 0.4323], std=[0.2326, 0.2276, 0.2659])
+            transforms.Normalize(mean=MEAN, std=STD)
             #transforms.Lambda(lambd=lambda x: x * 2.0 - 1.0),  # Normalize to [-1, 1]
         ]
     )
@@ -198,7 +165,10 @@ if __name__ == '__main__':
         seg_model=seg_model,
         gt=encoded_label_tensor_512,
         gt_128=encoded_label_tensor_128,
-        srgan_model=srgan_model
+        srgan_model=srgan_model,
+        mode='gsg',  # gsg, lcg, sgg, diff
+        LAMBDA=100.0,
+        N=300
     )
     #debug_tensor(output_tensor_512, 'debug/output_512.png', 'output_512')
 

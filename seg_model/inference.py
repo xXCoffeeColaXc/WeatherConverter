@@ -16,6 +16,8 @@ from seg_model.utils.ext_transforms import *
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+SEG_MEAN, SEG_STD = [0.4865, 0.4998, 0.4323], [0.2326, 0.2276, 0.2659]
+
 
 def load_config(config_path: str) -> Config:
     with open(config_path, 'r') as file:
@@ -39,7 +41,7 @@ def compute_gradient_magnitude(
     gradients_np = input_gradients.squeeze(0).cpu().numpy()  # Shape: [3, 512, 512]
 
     if denormalize:
-        gradients_np = gradients_np * np.array([0.229, 0.224, 0.225])[:, None, None]
+        gradients_np = gradients_np * np.array(SEG_STD)[:, None, None]
     gradient_magnitude = np.sqrt(np.sum(gradients_np**2, axis=0))  # Shape: [512, 512]
 
     if verbose:
@@ -58,7 +60,7 @@ def preprocess(ori_img_path: str,
                img_path: str,
                gt_label_ids_path: str,
                gt_color_path: str,
-               verbose=False) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, Image.Image]:
+               verbose=False) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, Image.Image]:
     '''
     Return the original image, input tensor, encoded label tensor (512), encoded label tensor (128) , and the colorized ground truth image
     '''
@@ -70,15 +72,19 @@ def preprocess(ori_img_path: str,
 
     val_transform = ExtCompose(
         [
+            #AddGaussianNoise(mean=0.0, std_range=(0.125, 0.150)),
             ExtResize(size=(1080 // 2, 1920 // 2), interpolation=Image.BILINEAR, just_label=True),
             ExtCenterCrop(size=(512, 512), just_label=True),
             ExtToTensor(),
-            ExtNormalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ExtNormalize(mean=SEG_MEAN, std=SEG_STD),
         ]
     )
 
     val_label_mask_transform = T.Compose(
-        [T.Resize(size=(1080 // 8, 1920 // 8), interpolation=Image.NEAREST), T.CenterCrop(size=(128, 128))]
+        [
+            T.Resize(size=(1080 // 8, 1920 // 8), interpolation=Image.NEAREST),
+            T.CenterCrop(size=(128, 128)),  #T.ToTensor()
+        ]
     )
 
     val_color_transform = T.Compose(
@@ -149,12 +155,9 @@ def infer(model: torch.nn.Module,
 
     input_gradients = input_tensor.grad.detach()  # Shape: [1, 3, 512, 512]
 
-    input_tensor.grad = None
-    # Clean up variables to free memory
-    del output, loss
-    torch.cuda.empty_cache()
+    #input_tensor.grad = None
 
-    gradients_np = input_gradients.detach().cpu().squeeze(0).numpy()
+    #gradients_np = input_gradients.detach().cpu().squeeze(0).numpy()
 
     if verbose:
         print(f"Input Tensor requires gradient: {input_tensor.requires_grad}")
@@ -162,7 +165,7 @@ def infer(model: torch.nn.Module,
         print(f"Output tensor shape: {output.shape}")
         print(f"Predicted tensor shape: {pred.shape}")
 
-    return pred, input_gradients, gradients_np
+    return pred, input_gradients, encoded_label_tensor
 
 
 def visualize_samples(
@@ -174,7 +177,8 @@ def visualize_samples(
     lbl_colored_img: Image.Image,
     save_path: Path
 ) -> None:
-    denorm = Denormalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    #denorm = Denormalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    denorm = Denormalize(mean=SEG_MEAN, std=SEG_STD)
 
     # Convert input tensor to numpy array for visualization
     image_np = denorm(input_tensor.squeeze(0).detach().cpu()).numpy()
@@ -194,8 +198,8 @@ def visualize_samples(
         (original_image, 'Original image'),  # asdaaaaaaaaaaaaaaa
         (image_np, 'SRGAN image'),  # asdaaaaaaaaaaaaaaa
         (colorized_preds, 'Colorized Predictions'),  # asdaaaaaaaaaaaaaaa
-        (gradient_magnitude_avg_128, 'Gradient Magnitude'),  # asdaaaaaaaaaaaaaaa
-        (encoded_label_tensor, 'Encoded Label Tensor'),  # asdaaaaaaaaaaaaaaa
+        #(gradient_magnitude_avg_128, 'Gradient Magnitude'),  # asdaaaaaaaaaaaaaaa
+        #(encoded_label_tensor, 'Encoded Label Tensor'),  # asdaaaaaaaaaaaaaaa
         (lbl_colored_img, 'Ground Truth')  # asdaaaaaaaaaaaaaaa
     ]
 
@@ -208,7 +212,7 @@ def visualize_samples(
         axes[i].set_title(title)
         axes[i].axis('off')
 
-    plt.savefig(save_path / 'sr_pred_gt_noisy_more.png')  # TODO: add unique name
+    plt.savefig(save_path)
     plt.close()
     print("Visualization saved.")
 
@@ -224,10 +228,10 @@ if __name__ == '__main__':
     gt_color_path = str(gt_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_gt_labelColor.png')
     original_img_path = str(rgb_anon_path / 'fog/val/GOPR0476/GOPR0476_frame_000854_rgb_anon.png')
 
-    model_path = Path(config.folders.checkpoints) / 'no_augmented/deeplabv3plus_resnet101_epoch_40.pth'
+    model_path = Path(config.folders.checkpoints) / 'augmented/deeplabv3plus_resnet101_epoch_80.pth'
     model = load_model(model_path, config.model)
 
-    original_image, input_tensor, encoded_label_tensor, lbl_colored_img = preprocess(original_img_path, img_path, gt_label_ids_path, gt_color_path)
+    original_image, input_tensor, encoded_label_tensor, _,  lbl_colored_img = preprocess(original_img_path, img_path, gt_label_ids_path, gt_color_path)
 
     pred, input_gradients, gradients_np = infer(model, input_tensor, encoded_label_tensor)
 
@@ -235,7 +239,7 @@ if __name__ == '__main__':
     gradients_avg_128 = torch.nn.functional.avg_pool2d(input_gradients, kernel_size=4, stride=4)
     gradient_magnitude_avg_128 = compute_gradient_magnitude(gradients_avg_128, denormalize=True, norm=False)
 
-    save_path = Path(config.folders.samples) / 'no_augmented'
+    save_path = Path(config.folders.samples) / 'augmented/ori_sr_pred_gt.png'
     visualize_samples(
         original_image,
         input_tensor,
