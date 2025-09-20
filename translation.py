@@ -133,30 +133,30 @@ if __name__ == '__main__':
     # ----------------------------------------------------------------------------
     # ------------------------------ Preprocess Test Data ------------------------
     # ----------------------------------------------------------------------------
-    _, input_tensor_512, encoded_label_tensor_512, lbl_colored_img_512 = seg_infer.preprocess(ori_img_path=input_image_path, img_path=input_image_path, gt_label_ids_path=gt_label_ids_path, gt_color_path=gt_color_path)
+    _, input_tensor_512, encoded_label_tensor_512, lbl_colored_img_512 = seg_infer.preprocess(
+        ori_img_path=input_image_path,
+        img_path=input_image_path,
+        gt_label_ids_path=gt_label_ids_path,
+        gt_color_path=gt_color_path)
 
-    input_transform = transforms.Compose(
-        [
-            transforms.Resize(diff_config.data.image_size, transforms.InterpolationMode.BILINEAR),
-            transforms.CenterCrop(diff_config.data.image_size),
-            transforms.ToTensor(),
-            transforms.Lambda(lambd=lambda x: x * 2.0 - 1.0),  # Normalize to [-1, 1]
-        ]
-    )
+    input_transform = transforms.Compose([
+        transforms.Resize(diff_config.data.image_size, transforms.InterpolationMode.BILINEAR),
+        transforms.CenterCrop(diff_config.data.image_size),
+        transforms.ToTensor(),
+        transforms.Lambda(lambd=lambda x: x * 2.0 - 1.0),  # Normalize to [-1, 1]
+    ])
     input_tensor_128: torch.Tensor = input_transform(input_image).unsqueeze(0).to(device)  # [1, 3, 128, 128]
 
     # ----------------------------------------------------------------------------
     # ------------------------------ Run translation -----------------------------
     # ----------------------------------------------------------------------------
     try:
-        output_tensor_512 = sample_with_sgg(
-            input_tensor=input_tensor_128,
-            diff_model=diff_model,
-            diff_scheduler=diff_scheduler,
-            seg_model=seg_model,
-            gt=encoded_label_tensor_512,
-            srgan_model=srgan_model
-        )
+        output_tensor_512 = sample_with_sgg(input_tensor=input_tensor_128,
+                                            diff_model=diff_model,
+                                            diff_scheduler=diff_scheduler,
+                                            seg_model=seg_model,
+                                            gt=encoded_label_tensor_512,
+                                            srgan_model=srgan_model)
         debug_tensor(output_tensor_512, 'debug/output_512.png', 'output_512')
     except Exception as e:
         print(e)
